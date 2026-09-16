@@ -1,0 +1,76 @@
+name: Build packages
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'srcpkgs/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build packages (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/void-linux/void-glibc-full:latest
+      options: --privileged
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare container
+        run: |
+          # Установка зависимостей
+          xbps-install -Syu xbps && xbps-install -yu
+          xbps-install -y sudo bash curl git rsync openssh
+
+          # Создание пользователя для сборки
+          useradd -G xbuilder -M builder
+          echo "builder:100000:65536" > /etc/subuid
+          echo "builder:100000:65536" > /etc/subgid
+
+      - name: Clone void-packages
+        run: |
+          git clone --depth 1 https://github.com/void-linux/void-packages.git void-packages
+          cd void-packages
+          git checkout --detach master
+
+      - name: Merge templates
+        run: |
+          echo "==> Copying templates..."
+          cp -rv srcpkgs/* void-packages/srcpkgs/
+
+      - name: Prepare masterdir
+        run: |
+          cd void-packages
+          chown -R builder:builder .
+          sudo -Eu builder common/travis/set_mirror.sh
+          sudo -Eu builder common/travis/prepare.sh
+          common/travis/fetch-xtools.sh
+
+      - name: Build packages
+        run: |
+          cd void-packages
+          export PATH="/opt/xbps/usr/bin/:$PATH"
+          
+          # Определяем, что собирать. Пока просто все пакеты из srcpkgs.
+          # Позже мы заменим это на определение изменённых файлов.
+          PKGS=$(ls -d srcpkgs/*/ | cut -d/ -f2)
+          echo "Building: $PKGS"
+
+          for pkg in ${PKGS}; do
+            # Собираем пакет для текущей архитектуры из матрицы
+            sudo -Eu builder ./xbps-src -j$(nproc) -a ${{ matrix.arch }} pkg "${pkg}"
+          done
+
+      - name: Upload packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: void-packages-${{ matrix.arch }}
+          path: void-packages/hostdir/binpkgs/
