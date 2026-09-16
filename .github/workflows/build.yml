@@ -49,18 +49,33 @@ jobs:
         steps:
             - name: Prepare container
               run: |
+                  set -e
+
+                  # switch to repo-ci mirror
                   mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
                   sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
 
-                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
+                  # Сначала ставим пакеты из официальных репо
+                  xbps-install -Syu xbps
+                  xbps-install -yu
+                  xbps-install -y sudo bash curl git rsync openssh
 
-                  xbps-install -Syu xbps && xbps-install -yu && xbps-install -y sudo bash curl git rsync openssh
+                  # Проверка, что git реально встал
+                  echo "git: $(command -v git || echo NOT_FOUND)"
+
+                  # create non-root user and subuids for namespaces
                   useradd -G xbuilder -M builder
                   echo "builder:100000:65536" > /etc/subuid
                   echo "builder:100000:65536" > /etc/subgid
 
+                  # Наш Pages-репозиторий подключаем последним (если он недоступен — установка уже прошла)
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
+
             - name: Checkout this repo
               run: |
+                  set -e
+                  echo "PATH=$PATH"
+                  echo "which git: $(command -v git || echo NOT_FOUND)"
                   git clone --depth 1 --single-branch "https://github.com/${{ github.repository }}.git" extra
                   cd extra
                   if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
@@ -249,20 +264,16 @@ jobs:
 
                   rm -f *-repodata*
 
-                  # ── Ключевая правка: говорим xbps-rindex, для какой арх собираем индекс ──
                   export XBPS_ARCH="${ARCH_DIR}"
                   echo "XBPS_ARCH=${ARCH_DIR}"
 
                   xbps-rindex -f -a *."${ARCH_DIR}".xbps
                   xbps-rindex -c .
 
-                  # ── Подпись ──
                   if [ -n "$PRIVATE_KEY_OF_XBPS_REPO" ] && [ -n "$PRIVATE_KEY_OF_XBPS_REPO_NAME" ]; then
                       printf '%s' "$PRIVATE_KEY_OF_XBPS_REPO" | base64 -di > repo.pem 2>/dev/null || true
                       if [ ! -s repo.pem ]; then
                           echo "!! repo.pem is empty — base64 decode failed"
-                          echo "   secret length: ${#PRIVATE_KEY_OF_XBPS_REPO}"
-                          echo "   first 40 chars: ${PRIVATE_KEY_OF_XBPS_REPO:0:40}"
                           exit 1
                       fi
                       echo "   key header: $(head -1 repo.pem)"
