@@ -24,7 +24,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Prepare container
         run: |
@@ -134,7 +136,7 @@ jobs:
 
       - name: Upload packages as artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: void-packages-${{ matrix.arch }}
           path: void-packages/hostdir/binpkgs/
