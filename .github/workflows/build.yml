@@ -1,210 +1,288 @@
 name: Build packages
 
 on:
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'srcpkgs/**'
-      - '.github/workflows/**'
-  workflow_dispatch:
+    push:
+        branches:
+            - main
+            - master
+        paths:
+            - "srcpkgs/**"
+            - ".github/workflows/**"
+            - "shlibs*"
+    workflow_dispatch:
 
 jobs:
-  build:
-    name: Build packages (${{ matrix.arch }})
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/void-linux/void-glibc-full:latest
-      options: --privileged
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: x86_64,  host: x86_64, test: 1 }
-          - { arch: aarch64, host: x86_64, test: 0 }
+    build:
+        name: Build packages
+        runs-on: ubuntu-latest
+        container:
+            image: ghcr.io/void-linux/void-${{ matrix.config.libc }}-full:20250616R1
+            options: --platform ${{ matrix.config.platform }} --privileged
+            volumes:
+                - /dev:/dev
+            env:
+                ARCH: "${{ matrix.config.arch }}"
+                BOOTSTRAP: "${{ matrix.config.host }}"
+                TEST: "${{ matrix.config.test }}"
+        strategy:
+            fail-fast: false
+            matrix:
+                config:
+                    - {
+                          arch: x86_64,
+                          host: x86_64,
+                          libc: glibc,
+                          platform: linux/amd64,
+                          test: 1,
+                      }
+                    - {
+                          arch: aarch64,
+                          host: x86_64,
+                          libc: glibc,
+                          platform: linux/amd64,
+                          test: 0,
+                      }
 
-    permissions:
-      contents: write
+        permissions:
+            contents: write
 
-    steps:
-      - name: Prepare container
-        run: |
-          set -e
-          xbps-install -Syu xbps && xbps-install -yu
-          xbps-install -y sudo bash curl git rsync openssh
+        steps:
+            - name: Prepare container
+              run: |
+                  # switch to repo-ci mirror
+                  mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+                  sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
 
-          useradd -G xbuilder -M builder
-          echo "builder:100000:65536" > /etc/subuid
-          echo "builder:100000:65536" > /etc/subgid
+                  # Подключение опубликованного репозитория в системный xbps контейнера
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
 
-          git config --global --add safe.directory '*'
+                  # install dependencies
+                  xbps-install -Syu xbps && xbps-install -yu && xbps-install -y sudo bash curl git rsync openssh
+                  # create non-root user and subuids for namespaces
+                  useradd -G xbuilder -M builder
+                  echo "builder:100000:65536" > /etc/subuid
+                  echo "builder:100000:65536" > /etc/subgid
 
-      - name: Checkout repository
-        run: |
-          set -e
-          git clone --single-branch --branch main \
-            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" .
-          if [ -n "${{ github.event.before }}" ] && \
-             [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-              git fetch --depth 1 origin "${{ github.event.before }}" 2>/dev/null || true
-          fi
-          git checkout --detach "${{ github.sha }}"
+            - name: Checkout this repo
+              run: |
+                  git clone --depth 1 --single-branch "https://github.com/${{ github.repository }}.git" extra
+                  cd extra
+                  if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+                      git fetch --no-tags origin "${{ github.event.before }}" --depth 1 || true
+                  fi
+                  git fetch --no-tags origin "${{ github.sha }}" --depth 1
+                  git checkout --detach "${{ github.sha }}"
 
-      - name: Clone void-packages
-        run: |
-          set -e
-          git clone --depth 1 https://github.com/void-linux/void-packages.git void-packages
-          cd void-packages
-          git checkout --detach master
+            - name: Determine changed templates
+              id: changed
+              run: |
+                  cd extra
 
-      - name: Merge templates
-        run: |
-          set -e
-          echo "==> Copying templates..."
-          cp -rv srcpkgs/* void-packages/srcpkgs/
+                  base="${{ github.event.before }}"
+                  tip="${{ github.sha }}"
 
-      - name: Prepare masterdir
-        run: |
-          set -e
-          cd void-packages
-          echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
-          chown -R builder:builder .
-          sudo -Eu builder common/travis/set_mirror.sh
-          sudo -Eu builder common/travis/prepare.sh
-          common/travis/fetch-xtools.sh
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                      changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" \
+                        | tr '\n' ' ')
+                      removed_pkgs=""
+                  else
+                      changed_pkgs=$(git diff --name-only "$base" "$tip" --diff-filter=AM -- 'srcpkgs/*/template' \
+                          | cut -d/ -f2 \
+                          | sort -u \
+                          | tr '\n' ' ')
 
-      - name: Determine changed templates
-        id: changed
-        run: |
-          set -e
-          cd "$GITHUB_WORKSPACE"
+                      removed_pkgs=$(git diff --name-status "$base" "$tip" -- 'srcpkgs/*/template' \
+                          | awk '$1=="D"{print $2}' \
+                          | cut -d/ -f2 \
+                          | sort -u \
+                          | tr '\n' ' ')
+                  fi
 
-          base="${{ github.event.before }}"
-          tip="${{ github.sha }}"
+                  changed_pkgs="${changed_pkgs%% }"
+                  removed_pkgs="${removed_pkgs%% }"
 
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-              changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort | tr '\n' ' ')
-              removed_pkgs=""
-          else
-              changed_pkgs=$(git diff --name-only "$base" "$tip" --diff-filter=AM -- 'srcpkgs/*/template' \
-                  | cut -d/ -f2 | sort -u | tr '\n' ' ')
-              removed_pkgs=$(git diff --name-status "$base" "$tip" -- 'srcpkgs/*/template' \
-                  | awk '$1=="D"{print $2}' | cut -d/ -f2 | sort -u | tr '\n' ' ')
-          fi
+                  echo "Changed templates: ${changed_pkgs:-<none>}"
+                  echo "Removed templates: ${removed_pkgs:-<none>}"
 
-          changed_pkgs="${changed_pkgs%% }"
-          removed_pkgs="${removed_pkgs%% }"
+                  echo "pkgs=$changed_pkgs" >> "$GITHUB_OUTPUT"
+                  echo "removed=$removed_pkgs" >> "$GITHUB_OUTPUT"
 
-          echo "Changed: ${changed_pkgs:-<none>}"
-          echo "Removed: ${removed_pkgs:-<none>}"
+            - name: Checkout void-packages
+              run: |
+                  git clone --depth 1 https://github.com/void-linux/void-packages.git void-packages
+                  cd void-packages
+                  git checkout --detach master
 
-          echo "pkgs=$changed_pkgs"    >> "$GITHUB_OUTPUT"
-          echo "removed=$removed_pkgs" >> "$GITHUB_OUTPUT"
+            - name: Merge templates and edit shlibs
+              run: |
+                  echo "==> copying templates..."
+                  if [ -d "extra/srcpkgs" ]; then
+                      cp -rv extra/srcpkgs/* void-packages/srcpkgs/
+                  fi
 
-      - name: Build packages
-        id: build_step
-        env:
-          ARCH: ${{ matrix.arch }}
-          HOST: ${{ matrix.host }}
-          TEST: ${{ matrix.test }}
-        run: |
-          set -e
-          export PATH="/opt/xbps/usr/bin/:$PATH"
+                  SHLIBS_FILE="void-packages/common/shlibs"
 
-          changed="${{ steps.changed.outputs.pkgs }}"
-          echo "Building: ${changed:-<none>} (target=$ARCH, host=$HOST)"
+                  echo "==> updating common/shlibs..."
+                  for f in extra/shlibs extra/shlibs_append; do
+                      if [ -f "$f" ]; then
+                          echo "   + applying $f"
+                          tr -d '\r' < "$f" >> "$SHLIBS_FILE"
+                          echo "" >> "$SHLIBS_FILE"
+                      fi
+                  done
 
-          if [ -z "$changed" ]; then
-              echo "Nothing to build."
-              echo "built=" >> "$GITHUB_OUTPUT"
-              exit 0
-          fi
+                  if [ -f "extra/shlibs_remove" ]; then
+                      while IFS= read -r line; do
+                          line=$(echo "$line" | tr -d '\r')
+                          [ -z "$line" ] && continue
+                          grep -vF "$line" "$SHLIBS_FILE" > "$SHLIBS_FILE.tmp" && mv "$SHLIBS_FILE.tmp" "$SHLIBS_FILE"
+                          echo "   - removed: $line"
+                      done < "extra/shlibs_remove"
+                  fi
 
-          arch_flag=""
-          if [ "$ARCH" != "$HOST" ]; then
-              arch_flag="-a $ARCH"
-          fi
+                  echo "=> applying inline edits..."
+                  if [ -d "void-packages/srcpkgs/hyprutils/patches" ]; then
+                      echo "   - removing void-packages/srcpkgs/hyprutils/patches"
+                      rm -rf void-packages/srcpkgs/hyprutils/patches
+                  fi
 
-          test_flag=""
-          if [ "$TEST" = "1" ]; then
-              test_flag="-Q"
-          fi
+            - name: Prepare masterdir
+              env:
+                  PUBLIC_KEY_OF_XBPS_REPO: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO }}
+                  PUBLIC_KEY_OF_XBPS_REPO_NAME: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO_NAME }}
+              run: |
+                  cd void-packages
 
-          cd void-packages
+                  # Публичный ключ для проверки подписи нашего репозитория
+                  if [ -n "$PUBLIC_KEY_OF_XBPS_REPO_NAME" ] && [ -n "$PUBLIC_KEY_OF_XBPS_REPO" ]; then
+                      printf '%s' "$PUBLIC_KEY_OF_XBPS_REPO" | base64 -d \
+                        > "common/repo-keys/$PUBLIC_KEY_OF_XBPS_REPO_NAME"
+                  fi
 
-          PKGS=$(sudo -Eu builder ./xbps-src $test_flag sort-dependencies $changed)
-          echo "Build order: $PKGS"
+                  # Allow chroot breakout to bypass unshare restrictions inside container
+                  echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
 
-          built=""
-          for pkg in ${PKGS}; do
-            echo "==> Building $pkg"
-            sudo -Eu builder ./xbps-src -j$(nproc) -s $arch_flag $test_flag pkg "${pkg}"
-            built="$built $pkg"
-          done
-          built="${built%% }"
-          echo "built=$built" >> "$GITHUB_OUTPUT"
+                  # Добавляем опубликованный репозиторий GitHub Pages внутрь xbps-src
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" >> etc/conf
 
-      - name: Show results
-        if: always()
-        run: |
-          echo "=== binpkgs ==="
-          find void-packages/hostdir/binpkgs -maxdepth 2 -type f -name '*.xbps' -printf '%f\n' 2>/dev/null | sort || true
+                  chown -R builder:builder . &&
+                  sudo -Eu builder common/travis/set_mirror.sh &&
+                  sudo -Eu builder common/travis/prepare.sh &&
+                  common/travis/fetch-xtools.sh
 
-      - name: Upload packages as artifacts
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: void-packages-${{ matrix.arch }}
-          path: void-packages/hostdir/binpkgs/
-          if-no-files-found: warn
+            - name: Build
+              id: build_step
+              run: |
+                  export PATH="/opt/xbps/usr/bin/:$PATH"
+                  cd void-packages
 
-      - name: Index and Deploy to GitHub Pages
-        if: success() && steps.build_step.outputs.built != ''
-        shell: bash
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          set -e
-          export PATH="/opt/xbps/usr/bin/:$PATH"
-          export XBPS_ARCH="${ARCH}"
+                  changed="${{ steps.changed.outputs.pkgs }}"
+                  removed="${{ steps.changed.outputs.removed }}"
 
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  if [ -z "$changed" ]; then
+                      echo "No changed templates, skipping build."
+                      echo "built=" >> "$GITHUB_OUTPUT"
+                      echo "failed=" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
 
-          shopt -s nullglob
-          pkgs=( void-packages/hostdir/binpkgs/*."${ARCH}".xbps )
-          if [ ${#pkgs[@]} -eq 0 ]; then
-              echo "No packages for ${ARCH}, nothing to deploy."
-              exit 0
-          fi
-          echo "Found ${#pkgs[@]} package(s) for ${ARCH}"
+                  if [ "$BOOTSTRAP" != "$ARCH" ]; then
+                      arch="-a $ARCH"
+                  fi
 
-          rm -rf deploy
-          git clone --depth 1 --branch gh-pages \
-            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" deploy
+                  if [ "$TEST" = 1 ]; then
+                      test="-Q"
+                  fi
 
-          mkdir -p "deploy/${ARCH}"
-          cp -v "${pkgs[@]}" "deploy/${ARCH}/"
+                  PKGS=$(sudo -Eu builder ./xbps-src $test sort-dependencies $changed)
+                  built=""
+                  failed=""
 
-          cd "deploy/${ARCH}"
-          rm -f *-repodata *-repodata.sig
+                  for pkg in ${PKGS}; do
+                      if sudo -Eu builder ./xbps-src -j"$(nproc)" -s $arch $test pkg "${pkg}"; then
+                          built="$built $pkg"
+                      else
+                          echo "!! build failed for ${pkg}"
+                          failed="$failed $pkg"
+                      fi
+                  done
 
-          xbps-rindex -f -a *.xbps
-          xbps-rindex -c .
+                  built="${built%% }"
+                  failed="${failed%% }"
 
-          echo "=== ${ARCH} directory ==="
-          ls -la
-          cd ..
+                  echo "Built packages: ${built:-<none>}"
+                  echo "Failed packages: ${failed:-<none>}"
 
-          touch .nojekyll
+                  echo "built=$built" >> "$GITHUB_OUTPUT"
+                  echo "failed=$failed" >> "$GITHUB_OUTPUT"
 
-          git add -f .
-          git commit -m "Re-index ${ARCH}: ${{ github.sha }}" || echo "No changes to commit"
+            - name: Index and Deploy to GitHub Pages Repository
+              if: success() && steps.build_step.outputs.built != ''
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PRIVATE_KEY_OF_XBPS_REPO: ${{ secrets.PRIVATE_KEY_OF_XBPS_REPO }}
+                  PRIVATE_KEY_OF_XBPS_REPO_NAME: ${{ secrets.PRIVATE_KEY_OF_XBPS_REPO_NAME }}
+              run: |
+                  set -e
+                  export PATH="/opt/xbps/usr/bin/:$PATH"
 
-          for i in 1 2 3 4 5; do
-              if git push origin gh-pages; then
-                  echo "Pushed successfully."
-                  break
-              fi
-              echo "Push failed, retrying after pull --rebase..."
-              git pull --rebase origin gh-pages
-          done
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  mkdir -p deploy
+                  git clone --depth 1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" deploy || true
+
+                  cd deploy
+                  if [ ! -d ".git" ]; then
+                      git init
+                      git checkout -b gh-pages
+                      git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+                  fi
+
+                  touch .nojekyll
+
+                  ARCH_DIR="${{ matrix.config.arch }}"
+                  mkdir -p "$ARCH_DIR"
+
+                  # Копируем бинарники только нашей архитектуры
+                  cp -v ../void-packages/hostdir/binpkgs/*."${ARCH_DIR}".xbps "$ARCH_DIR/" 2>/dev/null || true
+
+                  cd "$ARCH_DIR"
+
+                  # Удаляем только старые repodata (пакеты не трогаем!)
+                  rm -f *-repodata*
+
+                  # Задаем целевую архитектуру в системном конфиге xbps внутри контейнера
+                  echo "architecture=${ARCH_DIR}" > /etc/xbps.d/00-arch.conf
+
+                  # Генерация индекса
+                  xbps-rindex -f -a *."${ARCH_DIR}".xbps
+                  xbps-rindex -c .
+
+                  # Подпись
+                  if [ -n "$PRIVATE_KEY_OF_XBPS_REPO" ] && [ -n "$PRIVATE_KEY_OF_XBPS_REPO_NAME" ]; then
+                      printf '%s' "$PRIVATE_KEY_OF_XBPS_REPO" | base64 -d > repo.pem
+                      xbps-rindex --sign --signedby "$PRIVATE_KEY_OF_XBPS_REPO_NAME" --privkey repo.pem .
+                      rm -f repo.pem
+                  fi
+
+                  # Удаляем временную настройку архитектуры
+                  rm -f /etc/xbps.d/00-arch.conf
+
+                  echo "=== Содержимое папки $ARCH_DIR ==="
+                  ls -la
+
+                  cd ..
+
+                  git add -f .
+                  git commit -m "Re-index ${ARCH_DIR} repository: ${{ github.sha }}" || echo "No changes to commit"
+
+                  # Retry, чтобы параллельные джобы не перебивали друг друга
+                  for i in 1 2 3 4 5; do
+                      if git push origin gh-pages; then
+                          echo "Pushed successfully."
+                          break
+                      fi
+                      echo "Push failed, retrying after pull --rebase..."
+                      git pull --rebase origin gh-pages || true
+                  done
