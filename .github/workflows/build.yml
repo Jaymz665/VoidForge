@@ -23,11 +23,6 @@ jobs:
           - { arch: aarch64, host: x86_64, test: 0 }
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
       - name: Prepare container
         run: |
           set -e
@@ -37,6 +32,20 @@ jobs:
           useradd -G xbuilder -M builder
           echo "builder:100000:65536" > /etc/subuid
           echo "builder:100000:65536" > /etc/subgid
+
+          git config --global --add safe.directory '*'
+
+      - name: Checkout repository
+        run: |
+          set -e
+          git clone --single-branch --branch main \
+            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" .
+          # подтягиваем коммит-родитель, чтобы можно было диффить
+          if [ -n "${{ github.event.before }}" ] && \
+             [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+              git fetch --depth 1 origin "${{ github.event.before }}" 2>/dev/null || true
+          fi
+          git checkout --detach "${{ github.sha }}"
 
       - name: Clone void-packages
         run: |
@@ -70,7 +79,6 @@ jobs:
           base="${{ github.event.before }}"
           tip="${{ github.sha }}"
 
-          # workflow_dispatch: base пустой → собираем всё
           if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
               changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort | tr '\n' ' ')
               removed_pkgs=""
@@ -119,7 +127,6 @@ jobs:
 
           cd void-packages
 
-          # Разворачиваем зависимости: xbps-src сам подскажет порядок
           PKGS=$(sudo -Eu builder ./xbps-src $test_flag sort-dependencies $changed)
           echo "Build order: $PKGS"
 
