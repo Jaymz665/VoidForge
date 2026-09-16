@@ -22,6 +22,9 @@ jobs:
           - { arch: x86_64,  host: x86_64, test: 1 }
           - { arch: aarch64, host: x86_64, test: 0 }
 
+    permissions:
+      contents: write
+
     steps:
       - name: Prepare container
         run: |
@@ -40,7 +43,6 @@ jobs:
           set -e
           git clone --single-branch --branch main \
             "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" .
-          # подтягиваем коммит-родитель, чтобы можно было диффить
           if [ -n "${{ github.event.before }}" ] && \
              [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
               git fetch --depth 1 origin "${{ github.event.before }}" 2>/dev/null || true
@@ -148,3 +150,57 @@ jobs:
           name: void-packages-${{ matrix.arch }}
           path: void-packages/hostdir/binpkgs/
           if-no-files-found: warn
+
+      - name: Index and Deploy to GitHub Pages
+        if: success() && steps.build_step.outputs.built != '' && steps.changed.outputs.pkgs != ''
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -e
+          export PATH="/opt/xbps/usr/bin/:$PATH"
+          export XBPS_ARCH="${ARCH}"
+
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Ищем пакеты для текущей архитектуры
+          shopt -s nullglob
+          pkgs=( void-packages/hostdir/binpkgs/*."${ARCH}".xbps )
+          if [ ${#pkgs[@]} -eq 0 ]; then
+              echo "No packages for ${ARCH}, nothing to deploy."
+              exit 0
+          fi
+          echo "Found ${#pkgs[@]} package(s) for ${ARCH}"
+
+          # Клонируем gh-pages
+          rm -rf deploy
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" deploy
+
+          mkdir -p "deploy/${ARCH}"
+          cp -v "${pkgs[@]}" "deploy/${ARCH}/"
+
+          cd "deploy/${ARCH}"
+          rm -f *-repodata *-repodata.sig
+
+          xbps-rindex --arch "${ARCH}" -f -a *.xbps
+          xbps-rindex --arch "${ARCH}" -c .
+
+          echo "=== ${ARCH} directory ==="
+          ls -la
+          cd ..
+
+          touch .nojekyll
+
+          git add -f .
+          git commit -m "Re-index ${ARCH}: ${{ github.sha }}" || echo "No changes to commit"
+
+          # Retry на случай, если параллельный джоб уже пушил
+          for i in 1 2 3 4 5; do
+              if git push origin gh-pages; then
+                  echo "Pushed successfully."
+                  break
+              fi
+              echo "Push failed, retrying after pull --rebase..."
+              git pull --rebase origin gh-pages
+          done
