@@ -188,8 +188,8 @@ jobs:
           cd "deploy/${ARCH}"
           rm -f *-repodata *-repodata.sig
 
-          xbps-rindex --arch "${ARCH}" -f -a *.xbps
-          xbps-rindex --arch "${ARCH}" -c .
+          xbps-rindex -f -a *.xbps
+          xbps-rindex -c .
 
           echo "=== ${ARCH} directory ==="
           ls -la
