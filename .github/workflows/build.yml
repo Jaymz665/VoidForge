@@ -203,7 +203,7 @@ jobs:
                           built="$built $pkg"
                       else
                           echo "!! build failed for ${pkg}"
-                          failed="$failed $pkg"
+                          failed="$failed ${pkg}"
                       fi
                   done
 
@@ -218,6 +218,7 @@ jobs:
 
             - name: Index and Deploy to GitHub Pages Repository
               if: success() && steps.build_step.outputs.built != ''
+              shell: bash
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   PRIVATE_KEY_OF_XBPS_REPO: ${{ secrets.PRIVATE_KEY_OF_XBPS_REPO }}
@@ -249,7 +250,27 @@ jobs:
 
                   cd "$ARCH_DIR"
 
-                  # Удаляем только старые repodata (пакеты не трогаем!)
+                  # ── Чистка старых ревизий: оставляем 2 последние для каждого пакета ──
+                  KEEP=2
+                  echo "=== Pruning old revisions (keep last ${KEEP}) ==="
+                  for pkgname in $(ls *.xbps 2>/dev/null | sed -E 's/^([^_]+)_.*$/\1/' | sort -u); do
+                      # собираем список файлов пакета, отсортированный по revision (по убыванию)
+                      # формат файла: <pkg>-<version>_<revision>.<arch>.xbps
+                      mapfile -t revs < <(
+                          ls "${pkgname}"-*.xbps 2>/dev/null \
+                          | sed -E 's/^.*_([0-9]+)\.[a-z0-9_]+\.xbps$/\1 &/' \
+                          | sort -rn
+                      )
+                      if [ ${#revs[@]} -gt $KEEP ]; then
+                          for ((i=KEEP; i<${#revs[@]}; i++)); do
+                              f="${revs[$i]#* }"
+                              echo "   - removing old: $f"
+                              rm -f "$f"
+                          done
+                      fi
+                  done
+
+                  # Удаляем старые repodata (пакеты не трогаем!)
                   rm -f *-repodata*
 
                   # Задаем целевую архитектуру в системном конфиге xbps внутри контейнера
