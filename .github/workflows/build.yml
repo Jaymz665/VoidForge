@@ -49,16 +49,12 @@ jobs:
         steps:
             - name: Prepare container
               run: |
-                  # switch to repo-ci mirror
                   mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
                   sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
 
-                  # Подключение опубликованного репозитория в системный xbps контейнера
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
 
-                  # install dependencies
                   xbps-install -Syu xbps && xbps-install -yu && xbps-install -y sudo bash curl git rsync openssh
-                  # create non-root user and subuids for namespaces
                   useradd -G xbuilder -M builder
                   echo "builder:100000:65536" > /etc/subuid
                   echo "builder:100000:65536" > /etc/subgid
@@ -82,20 +78,13 @@ jobs:
                   tip="${{ github.sha }}"
 
                   if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-                      changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" \
-                        | tr '\n' ' ')
+                      changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | tr '\n' ' ')
                       removed_pkgs=""
                   else
                       changed_pkgs=$(git diff --name-only "$base" "$tip" --diff-filter=AM -- 'srcpkgs/*/template' \
-                          | cut -d/ -f2 \
-                          | sort -u \
-                          | tr '\n' ' ')
-
+                          | cut -d/ -f2 | sort -u | tr '\n' ' ')
                       removed_pkgs=$(git diff --name-status "$base" "$tip" -- 'srcpkgs/*/template' \
-                          | awk '$1=="D"{print $2}' \
-                          | cut -d/ -f2 \
-                          | sort -u \
-                          | tr '\n' ' ')
+                          | awk '$1=="D"{print $2}' | cut -d/ -f2 | sort -u | tr '\n' ' ')
                   fi
 
                   changed_pkgs="${changed_pkgs%% }"
@@ -122,7 +111,6 @@ jobs:
 
                   SHLIBS_FILE="void-packages/common/shlibs"
 
-                  echo "==> updating common/shlibs..."
                   for f in extra/shlibs extra/shlibs_append; do
                       if [ -f "$f" ]; then
                           echo "   + applying $f"
@@ -140,7 +128,6 @@ jobs:
                       done < "extra/shlibs_remove"
                   fi
 
-                  echo "=> applying inline edits..."
                   if [ -d "void-packages/srcpkgs/hyprutils/patches" ]; then
                       echo "   - removing void-packages/srcpkgs/hyprutils/patches"
                       rm -rf void-packages/srcpkgs/hyprutils/patches
@@ -153,16 +140,12 @@ jobs:
               run: |
                   cd void-packages
 
-                  # Публичный ключ для проверки подписи нашего репозитория
                   if [ -n "$PUBLIC_KEY_OF_XBPS_REPO_NAME" ] && [ -n "$PUBLIC_KEY_OF_XBPS_REPO" ]; then
-                      printf '%s' "$PUBLIC_KEY_OF_XBPS_REPO" | base64 -d \
+                      printf '%s' "$PUBLIC_KEY_OF_XBPS_REPO" | base64 -di \
                         > "common/repo-keys/$PUBLIC_KEY_OF_XBPS_REPO_NAME"
                   fi
 
-                  # Allow chroot breakout to bypass unshare restrictions inside container
                   echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
-
-                  # Добавляем опубликованный репозиторий GitHub Pages внутрь xbps-src
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" >> etc/conf
 
                   chown -R builder:builder . &&
@@ -177,12 +160,10 @@ jobs:
                   cd void-packages
 
                   changed="${{ steps.changed.outputs.pkgs }}"
-                  removed="${{ steps.changed.outputs.removed }}"
 
                   if [ -z "$changed" ]; then
                       echo "No changed templates, skipping build."
                       echo "built=" >> "$GITHUB_OUTPUT"
-                      echo "failed=" >> "$GITHUB_OUTPUT"
                       exit 0
                   fi
 
@@ -203,7 +184,7 @@ jobs:
                           built="$built $pkg"
                       else
                           echo "!! build failed for ${pkg}"
-                          failed="$failed ${pkg}"
+                          failed="$failed $pkg"
                       fi
                   done
 
@@ -214,7 +195,6 @@ jobs:
                   echo "Failed packages: ${failed:-<none>}"
 
                   echo "built=$built" >> "$GITHUB_OUTPUT"
-                  echo "failed=$failed" >> "$GITHUB_OUTPUT"
 
             - name: Index and Deploy to GitHub Pages Repository
               if: success() && steps.build_step.outputs.built != ''
@@ -245,7 +225,6 @@ jobs:
                   ARCH_DIR="${{ matrix.config.arch }}"
                   mkdir -p "$ARCH_DIR"
 
-                  # Копируем бинарники только нашей архитектуры
                   cp -v ../void-packages/hostdir/binpkgs/*."${ARCH_DIR}".xbps "$ARCH_DIR/" 2>/dev/null || true
 
                   cd "$ARCH_DIR"
@@ -254,8 +233,6 @@ jobs:
                   KEEP=2
                   echo "=== Pruning old revisions (keep last ${KEEP}) ==="
                   for pkgname in $(ls *.xbps 2>/dev/null | sed -E 's/^([^_]+)_.*$/\1/' | sort -u); do
-                      # собираем список файлов пакета, отсортированный по revision (по убыванию)
-                      # формат файла: <pkg>-<version>_<revision>.<arch>.xbps
                       mapfile -t revs < <(
                           ls "${pkgname}"-*.xbps 2>/dev/null \
                           | sed -E 's/^.*_([0-9]+)\.[a-z0-9_]+\.xbps$/\1 &/' \
@@ -270,25 +247,28 @@ jobs:
                       fi
                   done
 
-                  # Удаляем старые repodata (пакеты не трогаем!)
                   rm -f *-repodata*
 
-                  # Задаем целевую архитектуру в системном конфиге xbps внутри контейнера
-                  echo "architecture=${ARCH_DIR}" > /etc/xbps.d/00-arch.conf
+                  # ── Ключевая правка: говорим xbps-rindex, для какой арх собираем индекс ──
+                  export XBPS_ARCH="${ARCH_DIR}"
+                  echo "XBPS_ARCH=${ARCH_DIR}"
 
-                  # Генерация индекса
                   xbps-rindex -f -a *."${ARCH_DIR}".xbps
                   xbps-rindex -c .
 
-                  # Подпись
+                  # ── Подпись ──
                   if [ -n "$PRIVATE_KEY_OF_XBPS_REPO" ] && [ -n "$PRIVATE_KEY_OF_XBPS_REPO_NAME" ]; then
-                      printf '%s' "$PRIVATE_KEY_OF_XBPS_REPO" | base64 -d > repo.pem
+                      printf '%s' "$PRIVATE_KEY_OF_XBPS_REPO" | base64 -di > repo.pem 2>/dev/null || true
+                      if [ ! -s repo.pem ]; then
+                          echo "!! repo.pem is empty — base64 decode failed"
+                          echo "   secret length: ${#PRIVATE_KEY_OF_XBPS_REPO}"
+                          echo "   first 40 chars: ${PRIVATE_KEY_OF_XBPS_REPO:0:40}"
+                          exit 1
+                      fi
+                      echo "   key header: $(head -1 repo.pem)"
                       xbps-rindex --sign --signedby "$PRIVATE_KEY_OF_XBPS_REPO_NAME" --privkey repo.pem .
                       rm -f repo.pem
                   fi
-
-                  # Удаляем временную настройку архитектуры
-                  rm -f /etc/xbps.d/00-arch.conf
 
                   echo "=== Содержимое папки $ARCH_DIR ==="
                   ls -la
@@ -298,7 +278,6 @@ jobs:
                   git add -f .
                   git commit -m "Re-index ${ARCH_DIR} repository: ${{ github.sha }}" || echo "No changes to commit"
 
-                  # Retry, чтобы параллельные джобы не перебивали друг друга
                   for i in 1 2 3 4 5; do
                       if git push origin gh-pages; then
                           echo "Pushed successfully."
