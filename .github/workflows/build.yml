@@ -53,7 +53,6 @@ jobs:
         run: |
           set -e
           cd void-packages
-          # Разрешаем chroot breakout в контейнере
           echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
           chown -R builder:builder .
           sudo -Eu builder common/travis/set_mirror.sh
@@ -67,11 +66,16 @@ jobs:
           TEST: ${{ matrix.test }}
         run: |
           set -e
-          cd void-packages
           export PATH="/opt/xbps/usr/bin/:$PATH"
 
-          PKGS=$(ls -d srcpkgs/*/ | cut -d/ -f2)
-          echo "Building: $PKGS (target=$ARCH, host=$HOST)"
+          PKGS=$(ls -d "$GITHUB_WORKSPACE"/srcpkgs/*/ | xargs -n1 basename | tr '\n' ' ')
+          PKGS="${PKGS%% }"
+          echo "Building: ${PKGS:-<none>} (target=$ARCH, host=$HOST)"
+
+          if [ -z "$PKGS" ]; then
+              echo "Nothing to build."
+              exit 0
+          fi
 
           arch_flag=""
           if [ "$ARCH" != "$HOST" ]; then
@@ -83,17 +87,20 @@ jobs:
               test_flag="-Q"
           fi
 
+          cd void-packages
           for pkg in ${PKGS}; do
             echo "==> Building $pkg"
             sudo -Eu builder ./xbps-src -j$(nproc) -s $arch_flag $test_flag pkg "${pkg}"
           done
 
       - name: Show results
+        if: always()
         run: |
           echo "=== binpkgs ==="
-          find void-packages/hostdir/binpkgs -maxdepth 2 -type f -name '*.xbps' -printf '%f\n' | sort || true
+          find void-packages/hostdir/binpkgs -maxdepth 2 -type f -name '*.xbps' -printf '%f\n' 2>/dev/null | sort || true
 
       - name: Upload packages as artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: void-packages-${{ matrix.arch }}
