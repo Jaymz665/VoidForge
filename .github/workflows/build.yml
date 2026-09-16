@@ -59,6 +59,35 @@ jobs:
           sudo -Eu builder common/travis/prepare.sh
           common/travis/fetch-xtools.sh
 
+      - name: Determine changed templates
+        id: changed
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+
+          base="${{ github.event.before }}"
+          tip="${{ github.sha }}"
+
+          # workflow_dispatch: base пустой → собираем всё
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort | tr '\n' ' ')
+              removed_pkgs=""
+          else
+              changed_pkgs=$(git diff --name-only "$base" "$tip" --diff-filter=AM -- 'srcpkgs/*/template' \
+                  | cut -d/ -f2 | sort -u | tr '\n' ' ')
+              removed_pkgs=$(git diff --name-status "$base" "$tip" -- 'srcpkgs/*/template' \
+                  | awk '$1=="D"{print $2}' | cut -d/ -f2 | sort -u | tr '\n' ' ')
+          fi
+
+          changed_pkgs="${changed_pkgs%% }"
+          removed_pkgs="${removed_pkgs%% }"
+
+          echo "Changed: ${changed_pkgs:-<none>}"
+          echo "Removed: ${removed_pkgs:-<none>}"
+
+          echo "pkgs=$changed_pkgs"    >> "$GITHUB_OUTPUT"
+          echo "removed=$removed_pkgs" >> "$GITHUB_OUTPUT"
+
       - name: Build packages
         env:
           ARCH: ${{ matrix.arch }}
@@ -68,11 +97,10 @@ jobs:
           set -e
           export PATH="/opt/xbps/usr/bin/:$PATH"
 
-          PKGS=$(ls -d "$GITHUB_WORKSPACE"/srcpkgs/*/ | xargs -n1 basename | tr '\n' ' ')
-          PKGS="${PKGS%% }"
-          echo "Building: ${PKGS:-<none>} (target=$ARCH, host=$HOST)"
+          changed="${{ steps.changed.outputs.pkgs }}"
+          echo "Building: ${changed:-<none>} (target=$ARCH, host=$HOST)"
 
-          if [ -z "$PKGS" ]; then
+          if [ -z "$changed" ]; then
               echo "Nothing to build."
               exit 0
           fi
@@ -88,6 +116,11 @@ jobs:
           fi
 
           cd void-packages
+
+          # Разворачиваем зависимости: xbps-src сам подскажет порядок
+          PKGS=$(sudo -Eu builder ./xbps-src $test_flag sort-dependencies $changed)
+          echo "Build order: $PKGS"
+
           for pkg in ${PKGS}; do
             echo "==> Building $pkg"
             sudo -Eu builder ./xbps-src -j$(nproc) -s $arch_flag $test_flag pkg "${pkg}"
