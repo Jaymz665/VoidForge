@@ -159,6 +159,7 @@ jobs:
 
       - name: Index and Deploy to GitHub Pages
         if: success() && steps.build_step.outputs.built != ''
+        shell: bash
         env:
           ARCH: ${{ matrix.arch }}
         run: |
