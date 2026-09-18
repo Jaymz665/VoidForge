@@ -1,0 +1,31 @@
+# Template file for 'gmobile'
+pkgname=gmobile
+version=0.7.3
+revision=1
+build_style=meson
+configure_args="-Dexamples=false -Dtests=false -Dintrospection=false -Dvapi=false -Dgtk_doc=false -Dman=false -Dhwdb=false"
+hostmakedepends="meson pkg-config glib-devel gettext"
+makedepends="glib-devel json-glib-devel"
+short_desc="Mobile device library for Librem 5 and Phosh"
+maintainer="Jaymz665"
+license="LGPL-2.1-or-later"
+homepage="https://gitlab.gnome.org/World/Phosh/gmobile"
+distfiles="https://gitlab.gnome.org/World/Phosh/gmobile/-/archive/v${version}/gmobile-v${version}.tar.gz"
+checksum=a1ca9d304b7c14234443ddc4e93da32b26874abac9d767645c0f566d14c8042b
+
+gmobile_package() {
+	short_desc+=" - shared library"
+	pkg_install() {
+		vmove "usr/lib/*.so.*"
+	}
+}
+
+gmobile-devel_package() {
+	depends="${sourcepkg}>=${version}_${revision}"
+	short_desc+=" - development files"
+	pkg_install() {
+		vmove usr/include
+		vmove usr/lib/pkgconfig
+		vmove "usr/lib/*.so"
+	}
+}
