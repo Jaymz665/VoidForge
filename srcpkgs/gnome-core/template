@@ -1,6 +1,6 @@
 # Template file for 'gnome-core'
 pkgname=gnome-core
-version=50.0
+version=51.0
 revision=1
 metapackage=yes
 short_desc="GNOME meta-package for Void Linux - core components"
