@@ -1,7 +1,7 @@
 # Template file for 'phoc'
 pkgname=phoc
 version=0.57.0
-revision=1
+revision=2
 wrksrc="${pkgname}-v${version}"
 build_style=meson
 configure_args="
@@ -39,7 +39,8 @@ makedepends="
     MesaLib-devel
     pixman-devel
     wayland-protocols
-    vulkan-loader-devel"
+    vulkan-loader-devel
+    wlroots0.20-devel"
 short_desc="Wlroots-based phone compositor for Phosh"
 maintainer="Jaymz665"
 license="GPL-3.0-or-later"
