@@ -29,4 +29,4 @@ libmutter-cogl-51.so.0 mutter-51.0_1
 libmutter-cogl-pango-51.so.0 mutter-51.0_1
 libmutter-mtk-51.so.0 mutter-51.0_1
 libgnome-qr-gtk-4.so.0 gnome-desktop-51.0_1
-libaccountsservice.so.1 accountsservice-26.27.3_0
+libaccountsservice.so.1 accountsservice-26.27.3_0 ignore
