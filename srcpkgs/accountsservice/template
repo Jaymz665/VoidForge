@@ -1,7 +1,7 @@
 # Template file for 'accountsservice'
 pkgname=accountsservice
 version=26.27.3
-revision=0
+revision=1
 allow_soname_bump=yes
 build_style=meson
 build_helper="gir"
