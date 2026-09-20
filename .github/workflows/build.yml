@@ -209,7 +209,25 @@ jobs:
                       test="-Q"
                   fi
 
-                  PKGS=$(sudo -Eu builder ./xbps-src $test sort-dependencies $changed)
+                  # sort-dependencies разворачивает граф, но собираем только изменённые.
+                  # Зависимости уже лежат в Pages-репозитории и будут подтянуты как бинарники.
+                  SORTED=$(sudo -Eu builder ./xbps-src $test sort-dependencies $changed)
+                  echo "Full sorted order: $SORTED"
+
+                  PKGS=""
+                  for pkg in ${SORTED}; do
+                      case " $changed " in
+                          *" $pkg "*)
+                              PKGS="$PKGS $pkg"
+                              ;;
+                          *)
+                              echo "   - skipping (not changed, will be taken from repo): $pkg"
+                              ;;
+                      esac
+                  done
+                  PKGS="${PKGS# }"
+                  echo "Build list: $PKGS"
+
                   built=""
                   failed=""
 
@@ -289,7 +307,7 @@ jobs:
                   export XBPS_ARCH="${ARCH_DIR}"
                   echo "XBPS_ARCH=${ARCH_DIR}"
 
-                  # Удаляем старые подписи пакетов, если хотим переподписать
+                  # Удаляем старые подписи, чтобы переподписать всё
                   rm -f *.xbps.sig2
 
                   xbps-rindex -f -a *."${ARCH_DIR}".xbps
