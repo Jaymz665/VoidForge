@@ -9,6 +9,7 @@ on:
             - "srcpkgs/**"
             - ".github/workflows/**"
             - "shlibs*"
+            - "exclude.txt"
     workflow_dispatch:
 
 jobs:
@@ -127,6 +128,22 @@ jobs:
                               "$pkgdir" \
                               "void-packages/srcpkgs/$pkgname/"
                       done
+                  fi
+
+                  # ── Удаление пакетов из списка исключений ──
+                  if [ -f "extra/exclude.txt" ]; then
+                      echo "==> applying exclude list..."
+                      while IFS= read -r pkg || [ -n "$pkg" ]; do
+                          pkg=$(echo "$pkg" | tr -d ' \t\r')
+                          [ -z "$pkg" ] && continue
+                          case "$pkg" in \#*) continue ;; esac
+                          if [ -d "void-packages/srcpkgs/$pkg" ]; then
+                              echo "   - excluding: $pkg"
+                              rm -rf "void-packages/srcpkgs/$pkg"
+                          else
+                              echo "   - not present in upstream, skipping: $pkg"
+                          fi
+                      done < "extra/exclude.txt"
                   fi
 
                   SHLIBS_FILE="void-packages/common/shlibs"
@@ -257,7 +274,7 @@ jobs:
                           for ((i=KEEP; i<${#revs[@]}; i++)); do
                               f="${revs[$i]#* }"
                               echo "   - removing old: $f"
-                              rm -f "$f"
+                              rm -f "$f" "$f.sig2"
                           done
                       fi
                   done
@@ -277,7 +294,13 @@ jobs:
                           exit 1
                       fi
                       echo "   key header: $(head -1 repo.pem)"
+
+                      # Подпись каждого пакета → .xbps.sig2
+                      xbps-rindex --sign-pkg --privkey repo.pem *."${ARCH_DIR}".xbps
+
+                      # Подпись индекса
                       xbps-rindex --sign --signedby "$PRIVATE_KEY_OF_XBPS_REPO_NAME" --privkey repo.pem .
+
                       rm -f repo.pem
                   fi
 

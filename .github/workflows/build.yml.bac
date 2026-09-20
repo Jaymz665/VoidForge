@@ -60,7 +60,6 @@ jobs:
                   xbps-install -yu
                   xbps-install -y sudo bash curl git rsync openssh
 
-                  # Проверка, что git реально встал
                   echo "git: $(command -v git || echo NOT_FOUND)"
 
                   # create non-root user and subuids for namespaces
@@ -68,7 +67,7 @@ jobs:
                   echo "builder:100000:65536" > /etc/subuid
                   echo "builder:100000:65536" > /etc/subgid
 
-                  # Наш Pages-репозиторий подключаем последним (если он недоступен — установка уже прошла)
+                  # Наш Pages-репозиторий подключаем последним
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
 
             - name: Checkout this repo
@@ -119,9 +118,15 @@ jobs:
 
             - name: Merge templates and edit shlibs
               run: |
-                  echo "==> copying templates..."
+                  echo "==> syncing templates..."
                   if [ -d "extra/srcpkgs" ]; then
-                      cp -rv extra/srcpkgs/* void-packages/srcpkgs/
+                      for pkgdir in extra/srcpkgs/*/; do
+                          pkgname=$(basename "$pkgdir")
+                          echo "   - syncing $pkgname"
+                          rsync -a --delete \
+                              "$pkgdir" \
+                              "void-packages/srcpkgs/$pkgname/"
+                      done
                   fi
 
                   SHLIBS_FILE="void-packages/common/shlibs"
@@ -141,11 +146,6 @@ jobs:
                           grep -vF "$line" "$SHLIBS_FILE" > "$SHLIBS_FILE.tmp" && mv "$SHLIBS_FILE.tmp" "$SHLIBS_FILE"
                           echo "   - removed: $line"
                       done < "extra/shlibs_remove"
-                  fi
-
-                  if [ -d "void-packages/srcpkgs/hyprutils/patches" ]; then
-                      echo "   - removing void-packages/srcpkgs/hyprutils/patches"
-                      rm -rf void-packages/srcpkgs/hyprutils/patches
                   fi
 
             - name: Prepare masterdir
