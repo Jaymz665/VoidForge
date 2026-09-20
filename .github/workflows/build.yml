@@ -11,6 +11,11 @@ on:
             - "shlibs*"
             - "exclude.txt"
     workflow_dispatch:
+        inputs:
+            resign_only:
+                description: 'Only re-sign and re-index existing packages (skip build)'
+                type: boolean
+                default: false
 
 jobs:
     build:
@@ -52,23 +57,19 @@ jobs:
               run: |
                   set -e
 
-                  # switch to repo-ci mirror
                   mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
                   sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
 
-                  # Сначала ставим пакеты из официальных репо
                   xbps-install -Syu xbps
                   xbps-install -yu
                   xbps-install -y sudo bash curl git rsync openssh
 
                   echo "git: $(command -v git || echo NOT_FOUND)"
 
-                  # create non-root user and subuids for namespaces
                   useradd -G xbuilder -M builder
                   echo "builder:100000:65536" > /etc/subuid
                   echo "builder:100000:65536" > /etc/subgid
 
-                  # Наш Pages-репозиторий подключаем последним
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
 
             - name: Checkout this repo
@@ -130,7 +131,6 @@ jobs:
                       done
                   fi
 
-                  # ── Удаление пакетов из списка исключений ──
                   if [ -f "extra/exclude.txt" ]; then
                       echo "==> applying exclude list..."
                       while IFS= read -r pkg || [ -n "$pkg" ]; do
@@ -166,6 +166,7 @@ jobs:
                   fi
 
             - name: Prepare masterdir
+              if: ${{ !inputs.resign_only }}
               env:
                   PUBLIC_KEY_OF_XBPS_REPO: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO }}
                   PUBLIC_KEY_OF_XBPS_REPO_NAME: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO_NAME }}
@@ -187,6 +188,7 @@ jobs:
 
             - name: Build
               id: build_step
+              if: ${{ !inputs.resign_only }}
               run: |
                   export PATH="/opt/xbps/usr/bin/:$PATH"
                   cd void-packages
@@ -229,7 +231,7 @@ jobs:
                   echo "built=$built" >> "$GITHUB_OUTPUT"
 
             - name: Index and Deploy to GitHub Pages Repository
-              if: success() && steps.build_step.outputs.built != ''
+              if: always() && (steps.build_step.outputs.built != '' || inputs.resign_only)
               shell: bash
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -257,11 +259,14 @@ jobs:
                   ARCH_DIR="${{ matrix.config.arch }}"
                   mkdir -p "$ARCH_DIR"
 
-                  cp -v ../void-packages/hostdir/binpkgs/*."${ARCH_DIR}".xbps "$ARCH_DIR/" 2>/dev/null || true
+                  if [ "${{ inputs.resign_only }}" = "true" ]; then
+                      echo "=== resign-only mode: skipping package copy ==="
+                  else
+                      cp -v ../void-packages/hostdir/binpkgs/*."${ARCH_DIR}".xbps "$ARCH_DIR/" 2>/dev/null || true
+                  fi
 
                   cd "$ARCH_DIR"
 
-                  # ── Чистка старых ревизий: оставляем 2 последние для каждого пакета ──
                   KEEP=2
                   echo "=== Pruning old revisions (keep last ${KEEP}) ==="
                   for pkgname in $(ls *.xbps 2>/dev/null | sed -E 's/^([^_]+)_.*$/\1/' | sort -u); do
@@ -284,6 +289,9 @@ jobs:
                   export XBPS_ARCH="${ARCH_DIR}"
                   echo "XBPS_ARCH=${ARCH_DIR}"
 
+                  # Удаляем старые подписи пакетов, если хотим переподписать
+                  rm -f *.xbps.sig2
+
                   xbps-rindex -f -a *."${ARCH_DIR}".xbps
                   xbps-rindex -c .
 
@@ -295,10 +303,7 @@ jobs:
                       fi
                       echo "   key header: $(head -1 repo.pem)"
 
-                      # Подпись каждого пакета → .xbps.sig2
                       xbps-rindex --sign-pkg --privkey repo.pem *."${ARCH_DIR}".xbps
-
-                      # Подпись индекса
                       xbps-rindex --sign --signedby "$PRIVATE_KEY_OF_XBPS_REPO_NAME" --privkey repo.pem .
 
                       rm -f repo.pem
