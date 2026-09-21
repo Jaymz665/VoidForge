@@ -194,7 +194,7 @@ jobs:
 
                   echo "==> injecting custom repository into masterdir (post-prepare)..."
                   mkdir -p masterdir/etc/xbps.d
-                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" \
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}/" \
                       > masterdir/etc/xbps.d/20-voidforge.conf
 
                   mkdir -p masterdir/var/db/xbps/keys
