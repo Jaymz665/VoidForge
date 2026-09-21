@@ -1,7 +1,7 @@
 # Template file for 'bootmac'
 pkgname=bootmac
 version=0.7.1
-revision=2
+revision=3
 build_style=meson
 configure_args="-Dsystemd_units=false"
 hostmakedepends="pkg-config meson gobject-introspection prelink-cross qemu-user-aarch64"

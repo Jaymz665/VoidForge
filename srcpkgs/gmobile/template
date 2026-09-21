@@ -1,7 +1,7 @@
 # Template file for 'gmobile'
 pkgname=gmobile
 version=0.7.3
-revision=2
+revision=3
 build_style=meson
 configure_args="-Dexamples=false -Dtests=false -Dintrospection=false -Dvapi=false -Dgtk_doc=false -Dman=false -Dhwdb=false"
 hostmakedepends="meson pkg-config glib-devel gettext"
