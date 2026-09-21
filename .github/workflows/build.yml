@@ -1,10 +1,366 @@
-=== masterdir/etc/xbps.d/ ===
-...
-20-voidforge.conf
-...
+name: Build packages
 
-=== masterdir/etc/xbps.d/20-voidforge.conf ===
-repository=https://jaymz665.github.io/VoidForge/x86_64/
+on:
+    push:
+        branches:
+            - main
+            - master
+        paths:
+            - "srcpkgs/**"
+            - ".github/workflows/**"
+            - "shlibs*"
+            - "exclude.txt"
+    workflow_dispatch:
+        inputs:
+            resign_only:
+                description: 'Only re-sign and re-index existing packages (skip build)'
+                type: boolean
+                default: false
+            packages:
+                description: 'Space-separated list of packages to build (empty = all)'
+                default: ''
 
-=== keys in masterdir ===
-...
+jobs:
+    build:
+        name: Build packages
+        runs-on: ubuntu-latest
+        container:
+            image: ghcr.io/void-linux/void-${{ matrix.config.libc }}-full:20250616R1
+            options: --platform ${{ matrix.config.platform }} --privileged
+            volumes:
+                - /dev:/dev
+            env:
+                ARCH: "${{ matrix.config.arch }}"
+                BOOTSTRAP: "${{ matrix.config.host }}"
+                TEST: "${{ matrix.config.test }}"
+        strategy:
+            fail-fast: false
+            matrix:
+                config:
+                    - {
+                          arch: x86_64,
+                          host: x86_64,
+                          libc: glibc,
+                          platform: linux/amd64,
+                          test: 1,
+                      }
+                    - {
+                          arch: aarch64,
+                          host: x86_64,
+                          libc: glibc,
+                          platform: linux/amd64,
+                          test: 0,
+                      }
+
+        permissions:
+            contents: write
+
+        steps:
+            - name: Prepare container
+              run: |
+                  set -e
+
+                  mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+                  sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
+
+                  xbps-install -Syu xbps
+                  xbps-install -yu
+                  xbps-install -y sudo bash curl git rsync openssh
+
+                  echo "git: $(command -v git || echo NOT_FOUND)"
+
+                  useradd -G xbuilder -M builder
+                  echo "builder:100000:65536" > /etc/subuid
+                  echo "builder:100000:65536" > /etc/subgid
+
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
+
+            - name: Checkout this repo
+              run: |
+                  set -e
+                  echo "PATH=$PATH"
+                  echo "which git: $(command -v git || echo NOT_FOUND)"
+                  git clone --depth 1 --single-branch "https://github.com/${{ github.repository }}.git" extra
+                  cd extra
+                  if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+                      git fetch --no-tags origin "${{ github.event.before }}" --depth 1 || true
+                  fi
+                  git fetch --no-tags origin "${{ github.sha }}" --depth 1
+                  git checkout --detach "${{ github.sha }}"
+
+            - name: Determine changed templates
+              id: changed
+              run: |
+                  cd extra
+
+                  base="${{ github.event.before }}"
+                  tip="${{ github.sha }}"
+
+                  if [ -n "${{ inputs.packages }}" ]; then
+                      changed_pkgs="${{ inputs.packages }}"
+                      removed_pkgs=""
+                  elif [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                      changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | tr '\n' ' ')
+                      removed_pkgs=""
+                  else
+                      changed_pkgs=$(git diff --name-only "$base" "$tip" --diff-filter=AM -- 'srcpkgs/*/template' \
+                          | cut -d/ -f2 | sort -u | tr '\n' ' ')
+                      removed_pkgs=$(git diff --name-status "$base" "$tip" -- 'srcpkgs/*/template' \
+                          | awk '$1=="D"{print $2}' | cut -d/ -f2 | sort -u | tr '\n' ' ')
+                  fi
+
+                  changed_pkgs="${changed_pkgs%% }"
+                  removed_pkgs="${removed_pkgs%% }"
+
+                  echo "Changed templates: ${changed_pkgs:-<none>}"
+                  echo "Removed templates: ${removed_pkgs:-<none>}"
+
+                  echo "pkgs=$changed_pkgs" >> "$GITHUB_OUTPUT"
+                  echo "removed=$removed_pkgs" >> "$GITHUB_OUTPUT"
+
+            - name: Checkout void-packages
+              run: |
+                  git clone --depth 1 https://github.com/void-linux/void-packages.git void-packages
+                  cd void-packages
+                  git checkout --detach master
+
+            - name: Merge templates and edit shlibs
+              run: |
+                  echo "==> syncing templates..."
+                  if [ -d "extra/srcpkgs" ]; then
+                      for pkgdir in extra/srcpkgs/*/; do
+                          pkgname=$(basename "$pkgdir")
+                          echo "   - syncing $pkgname"
+                          rsync -a --delete \
+                              "$pkgdir" \
+                              "void-packages/srcpkgs/$pkgname/"
+                      done
+                  fi
+
+                  if [ -f "extra/exclude.txt" ]; then
+                      echo "==> applying exclude list..."
+                      while IFS= read -r pkg || [ -n "$pkg" ]; do
+                          pkg=$(echo "$pkg" | tr -d ' \t\r')
+                          [ -z "$pkg" ] && continue
+                          case "$pkg" in \#*) continue ;; esac
+                          if [ -d "void-packages/srcpkgs/$pkg" ]; then
+                              echo "   - excluding: $pkg"
+                              rm -rf "void-packages/srcpkgs/$pkg"
+                          else
+                              echo "   - not present in upstream, skipping: $pkg"
+                          fi
+                      done < "extra/exclude.txt"
+                  fi
+
+                  SHLIBS_FILE="void-packages/common/shlibs"
+
+                  for f in extra/shlibs extra/shlibs_append; do
+                      if [ -f "$f" ]; then
+                          echo "   + applying $f"
+                          tr -d '\r' < "$f" >> "$SHLIBS_FILE"
+                          echo "" >> "$SHLIBS_FILE"
+                      fi
+                  done
+
+                  if [ -f "extra/shlibs_remove" ]; then
+                      while IFS= read -r line; do
+                          line=$(echo "$line" | tr -d '\r')
+                          [ -z "$line" ] && continue
+                          grep -vF "$line" "$SHLIBS_FILE" > "$SHLIBS_FILE.tmp" && mv "$SHLIBS_FILE.tmp" "$SHLIBS_FILE"
+                          echo "   - removed: $line"
+                      done < "extra/shlibs_remove"
+                  fi
+
+            - name: Prepare masterdir
+              if: ${{ !inputs.resign_only }}
+              env:
+                  PUBLIC_KEY_OF_XBPS_REPO: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO }}
+                  PUBLIC_KEY_OF_XBPS_REPO_NAME: ${{ secrets.PUBLIC_KEY_OF_XBPS_REPO_NAME }}
+              run: |
+                  cd void-packages
+
+                  if [ -n "$PUBLIC_KEY_OF_XBPS_REPO_NAME" ] && [ -n "$PUBLIC_KEY_OF_XBPS_REPO" ]; then
+                      printf '%s' "$PUBLIC_KEY_OF_XBPS_REPO" | base64 -di \
+                        > "common/repo-keys/$PUBLIC_KEY_OF_XBPS_REPO_NAME"
+                  fi
+
+                  echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" >> etc/conf
+
+                  chown -R builder:builder . &&
+                  sudo -Eu builder common/travis/set_mirror.sh &&
+                  sudo -Eu builder common/travis/prepare.sh &&
+                  common/travis/fetch-xtools.sh
+
+                  echo "==> injecting custom repository into masterdir (post-prepare)..."
+                  mkdir -p masterdir/etc/xbps.d
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" \
+                      > masterdir/etc/xbps.d/20-voidforge.conf
+
+                  mkdir -p masterdir/var/db/xbps/keys
+                  cp -r common/repo-keys/* masterdir/var/db/xbps/keys/ 2>/dev/null || true
+
+                  echo "==> syncing masterdir indexes..."
+                  sudo -Eu builder chroot masterdir /usr/bin/xbps-install -S 2>&1 | tail -30 || true
+
+                  echo "=== masterdir/etc/xbps.d/ ==="
+                  ls -la masterdir/etc/xbps.d/ || true
+                  echo "=== masterdir/etc/xbps.d/20-voidforge.conf ==="
+                  cat masterdir/etc/xbps.d/20-voidforge.conf || true
+                  echo "=== keys in masterdir ==="
+                  ls -la masterdir/var/db/xbps/keys/ || true
+
+            - name: Build
+              id: build_step
+              if: ${{ !inputs.resign_only }}
+              run: |
+                  export PATH="/opt/xbps/usr/bin/:$PATH"
+                  cd void-packages
+
+                  changed="${{ steps.changed.outputs.pkgs }}"
+
+                  if [ -z "$changed" ]; then
+                      echo "No changed templates, skipping build."
+                      echo "built=" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+
+                  if [ "$BOOTSTRAP" != "$ARCH" ]; then
+                      arch="-a $ARCH"
+                  fi
+
+                  if [ "$TEST" = 1 ]; then
+                      test="-Q"
+                  fi
+
+                  SORTED=$(sudo -Eu builder ./xbps-src $test sort-dependencies $changed)
+                  echo "Full sorted order: $SORTED"
+
+                  PKGS=""
+                  for pkg in ${SORTED}; do
+                      case " $changed " in
+                          *" $pkg "*)
+                              PKGS="$PKGS $pkg"
+                              ;;
+                          *)
+                              echo "   - skipping (not changed, will be taken from repo): $pkg"
+                              ;;
+                      esac
+                  done
+                  PKGS="${PKGS# }"
+                  echo "Build list: $PKGS"
+
+                  built=""
+                  failed=""
+
+                  for pkg in ${PKGS}; do
+                      if sudo -Eu builder ./xbps-src -j"$(nproc)" -s $arch $test pkg "${pkg}"; then
+                          built="$built $pkg"
+                      else
+                          echo "!! build failed for ${pkg}"
+                          failed="$failed $pkg"
+                      fi
+                  done
+
+                  built="${built%% }"
+                  failed="${failed%% }"
+
+                  echo "Built packages: ${built:-<none>}"
+                  echo "Failed packages: ${failed:-<none>}"
+
+                  echo "built=$built" >> "$GITHUB_OUTPUT"
+
+            - name: Index and Deploy to GitHub Pages Repository
+              if: always() && (steps.build_step.outputs.built != '' || inputs.resign_only)
+              shell: bash
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PRIVATE_KEY_OF_XBPS_REPO: ${{ secrets.PRIVATE_KEY_OF_XBPS_REPO }}
+                  PRIVATE_KEY_OF_XBPS_REPO_NAME: ${{ secrets.PRIVATE_KEY_OF_XBPS_REPO_NAME }}
+              run: |
+                  set -e
+                  export PATH="/opt/xbps/usr/bin/:$PATH"
+
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  mkdir -p deploy
+                  git clone --depth 1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" deploy || true
+
+                  cd deploy
+                  if [ ! -d ".git" ]; then
+                      git init
+                      git checkout -b gh-pages
+                      git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+                  fi
+
+                  touch .nojekyll
+
+                  ARCH_DIR="${{ matrix.config.arch }}"
+                  mkdir -p "$ARCH_DIR"
+
+                  if [ "${{ inputs.resign_only }}" = "true" ]; then
+                      echo "=== resign-only mode: skipping package copy ==="
+                  else
+                      cp -v ../void-packages/hostdir/binpkgs/*."${ARCH_DIR}".xbps "$ARCH_DIR/" 2>/dev/null || true
+                  fi
+
+                  cd "$ARCH_DIR"
+
+                  KEEP=2
+                  echo "=== Pruning old revisions (keep last ${KEEP}) ==="
+                  for pkgname in $(ls *.xbps 2>/dev/null | sed -E 's/^([^_]+)_.*$/\1/' | sort -u); do
+                      mapfile -t revs < <(
+                          ls "${pkgname}"-*.xbps 2>/dev/null \
+                          | sed -E 's/^.*_([0-9]+)\.[a-z0-9_]+\.xbps$/\1 &/' \
+                          | sort -rn
+                      )
+                      if [ ${#revs[@]} -gt $KEEP ]; then
+                          for ((i=KEEP; i<${#revs[@]}; i++)); do
+                              f="${revs[$i]#* }"
+                              echo "   - removing old: $f"
+                              rm -f "$f" "$f.sig2"
+                          done
+                      fi
+                  done
+
+                  rm -f *-repodata*
+
+                  export XBPS_ARCH="${ARCH_DIR}"
+                  echo "XBPS_ARCH=${ARCH_DIR}"
+
+                  rm -f *.xbps.sig2
+
+                  xbps-rindex -f -a *."${ARCH_DIR}".xbps
+                  xbps-rindex -c .
+
+                  if [ -n "$PRIVATE_KEY_OF_XBPS_REPO" ] && [ -n "$PRIVATE_KEY_OF_XBPS_REPO_NAME" ]; then
+                      printf '%s' "$PRIVATE_KEY_OF_XBPS_REPO" | base64 -di > repo.pem 2>/dev/null || true
+                      if [ ! -s repo.pem ]; then
+                          echo "!! repo.pem is empty — base64 decode failed"
+                          exit 1
+                      fi
+                      echo "   key header: $(head -1 repo.pem)"
+
+                      xbps-rindex --sign-pkg --privkey repo.pem *."${ARCH_DIR}".xbps
+                      xbps-rindex --sign --signedby "$PRIVATE_KEY_OF_XBPS_REPO_NAME" --privkey repo.pem .
+
+                      rm -f repo.pem
+                  fi
+
+                  echo "=== Содержимое папки $ARCH_DIR ==="
+                  ls -la
+
+                  cd ..
+
+                  git add -f .
+                  git commit -m "Re-index ${ARCH_DIR} repository: ${{ github.sha }}" || echo "No changes to commit"
+
+                  for i in 1 2 3 4 5; do
+                      if git push origin gh-pages; then
+                          echo "Pushed successfully."
+                          break
+                      fi
+                      echo "Push failed, retrying after pull --rebase..."
+                      git pull --rebase origin gh-pages || true
+                  done
