@@ -16,6 +16,9 @@ on:
                 description: 'Only re-sign and re-index existing packages (skip build)'
                 type: boolean
                 default: false
+            packages:
+                description: 'Space-separated list of packages to build (empty = all)'
+                default: ''
 
 jobs:
     build:
@@ -93,7 +96,10 @@ jobs:
                   base="${{ github.event.before }}"
                   tip="${{ github.sha }}"
 
-                  if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                  if [ -n "${{ inputs.packages }}" ]; then
+                      changed_pkgs="${{ inputs.packages }}"
+                      removed_pkgs=""
+                  elif [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
                       changed_pkgs=$(find srcpkgs -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | tr '\n' ' ')
                       removed_pkgs=""
                   else
@@ -186,6 +192,22 @@ jobs:
                   sudo -Eu builder common/travis/prepare.sh &&
                   common/travis/fetch-xtools.sh
 
+                  # ── КЛЮЧЕВОЕ: прописываем наш репозиторий ВНУТРЬ masterdir,
+                  # чтобы xbps-src тянул target-зависимости из gh-pages,
+                  # а не из официальных репо Void.
+                  echo "==> injecting custom repository into masterdir..."
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" \
+                      >> masterdir/etc/xbps.d/repos-remote.conf
+
+                  # Диагностика: что теперь видит masterdir
+                  echo "=== masterdir repos ==="
+                  cat masterdir/etc/xbps.d/repos-remote.conf | grep -v '^#' | grep -v '^$' || true
+
+                  # Синхронизируем индексы внутри masterdir, чтобы xbps-src видел свежие пакеты
+                  sudo -Eu builder mkdir -p masterdir/var/db/xbps/keys 2>/dev/null || true
+                  cp -r common/repo-keys/* masterdir/var/db/xbps/keys/ 2>/dev/null || true
+                  sudo -Eu builder ./xbps-src binary-bootstrap 2>/dev/null || true
+
             - name: Build
               id: build_step
               if: ${{ !inputs.resign_only }}
@@ -209,8 +231,6 @@ jobs:
                       test="-Q"
                   fi
 
-                  # sort-dependencies разворачивает граф, но собираем только изменённые.
-                  # Зависимости уже лежат в Pages-репозитории и будут подтянуты как бинарники.
                   SORTED=$(sudo -Eu builder ./xbps-src $test sort-dependencies $changed)
                   echo "Full sorted order: $SORTED"
 
@@ -307,7 +327,6 @@ jobs:
                   export XBPS_ARCH="${ARCH_DIR}"
                   echo "XBPS_ARCH=${ARCH_DIR}"
 
-                  # Удаляем старые подписи, чтобы переподписать всё
                   rm -f *.xbps.sig2
 
                   xbps-rindex -f -a *."${ARCH_DIR}".xbps
