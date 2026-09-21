@@ -73,7 +73,7 @@ jobs:
                   echo "builder:100000:65536" > /etc/subuid
                   echo "builder:100000:65536" > /etc/subgid
 
-                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" > /etc/xbps.d/20-custom-repo.conf
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}/" > /etc/xbps.d/20-custom-repo.conf
 
             - name: Checkout this repo
               run: |
@@ -185,13 +185,14 @@ jobs:
                   fi
 
                   echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
-                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" >> etc/conf
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}/" >> etc/conf
 
                   chown -R builder:builder . &&
                   sudo -Eu builder common/travis/set_mirror.sh &&
                   sudo -Eu builder common/travis/prepare.sh &&
                   common/travis/fetch-xtools.sh
 
+                  # ── Конфиг для masterdir ──
                   echo "==> injecting custom repository into masterdir (post-prepare)..."
                   mkdir -p masterdir/etc/xbps.d
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}/" \
@@ -200,15 +201,43 @@ jobs:
                   mkdir -p masterdir/var/db/xbps/keys
                   cp -r common/repo-keys/* masterdir/var/db/xbps/keys/ 2>/dev/null || true
 
-                  echo "==> syncing masterdir indexes..."
-                  sudo -Eu builder chroot masterdir /usr/bin/xbps-install -S 2>&1 | tail -30 || true
+                  # ── ГЛАВНОЕ: восстановить уже собранные .xbps в hostdir/binpkgs ──
+                  #  Делается ПОСЛЕ prepare.sh, иначе он всё вычистит.
+                  echo "==> restoring pre-built packages from gh-pages into hostdir/binpkgs..."
+                  export PATH="/opt/xbps/usr/bin/:$PATH"
 
-                  echo "=== masterdir/etc/xbps.d/ ==="
-                  ls -la masterdir/etc/xbps.d/ || true
+                  rm -rf /tmp/gh-pages
+                  git clone --depth 1 --branch gh-pages \
+                      "https://github.com/${{ github.repository }}.git" \
+                      /tmp/gh-pages || echo "gh-pages branch not found"
+
+                  mkdir -p hostdir/binpkgs
+
+                  if [ -d "/tmp/gh-pages/${{ matrix.config.arch }}" ]; then
+                      cp -a /tmp/gh-pages/${{ matrix.config.arch }}/*.xbps hostdir/binpkgs/ 2>/dev/null || true
+
+                      # Локальный репо xbps-src не требует подписи — .sig2 от gh-pages не подходят
+                      rm -f hostdir/binpkgs/*.xbps.sig2
+
+                      cd hostdir/binpkgs
+                      if ls *.xbps >/dev/null 2>&1; then
+                          xbps-rindex -f -a *.xbps >/dev/null 2>&1 || true
+                          echo "   Restored $(ls *.xbps | wc -l) package(s) into hostdir/binpkgs"
+                          echo "   Sample:"
+                          ls *.xbps | head -5
+                      else
+                          echo "   No .xbps files copied"
+                      fi
+                      cd ../..
+                  else
+                      echo "   No packages in gh-pages for ${{ matrix.config.arch }}"
+                  fi
+
+                  # ── Диагностика ──
+                  echo "=== hostdir/binpkgs (top 5) ==="
+                  ls hostdir/binpkgs/*.xbps 2>/dev/null | head -5 || true
                   echo "=== masterdir/etc/xbps.d/20-voidforge.conf ==="
                   cat masterdir/etc/xbps.d/20-voidforge.conf || true
-                  echo "=== keys in masterdir ==="
-                  ls -la masterdir/var/db/xbps/keys/ || true
 
             - name: Build
               id: build_step
