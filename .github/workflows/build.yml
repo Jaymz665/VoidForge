@@ -185,28 +185,32 @@ jobs:
                   fi
 
                   echo "XBPS_ALLOW_CHROOT_BREAKOUT=yes" >> etc/conf
+
+                  # ── Наш репозиторий в конфиг xbps-src (host) ──
                   echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" >> etc/conf
+
+                  # ── Наш репозиторий в отдельный файл etc/xbps.d/.
+                  #    prepare.sh сам скопирует etc/xbps.d/* внутрь masterdir.
+                  #    Отдельный файл — чтобы set_mirror.sh не перезаписал.
+                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" \
+                      > etc/xbps.d/20-voidforge.conf
 
                   chown -R builder:builder . &&
                   sudo -Eu builder common/travis/set_mirror.sh &&
                   sudo -Eu builder common/travis/prepare.sh &&
                   common/travis/fetch-xtools.sh
 
-                  # ── КЛЮЧЕВОЕ: прописываем наш репозиторий ВНУТРЬ masterdir,
-                  # чтобы xbps-src тянул target-зависимости из gh-pages,
-                  # а не из официальных репо Void.
-                  echo "==> injecting custom repository into masterdir..."
-                  echo "repository=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ matrix.config.arch }}" \
-                      >> masterdir/etc/xbps.d/repos-remote.conf
+                  # ── Диагностика ──
+                  echo "=== host etc/xbps.d/20-voidforge.conf ==="
+                  cat etc/xbps.d/20-voidforge.conf || true
+                  echo "=== masterdir etc/xbps.d/ ==="
+                  ls -la masterdir/etc/xbps.d/ 2>/dev/null || echo "(no masterdir/etc/xbps.d yet)"
+                  echo "=== masterdir 20-voidforge.conf ==="
+                  cat masterdir/etc/xbps.d/20-voidforge.conf 2>/dev/null || echo "(missing in masterdir)"
 
-                  # Диагностика: что теперь видит masterdir
-                  echo "=== masterdir repos ==="
-                  cat masterdir/etc/xbps.d/repos-remote.conf | grep -v '^#' | grep -v '^$' || true
-
-                  # Синхронизируем индексы внутри masterdir, чтобы xbps-src видел свежие пакеты
-                  sudo -Eu builder mkdir -p masterdir/var/db/xbps/keys 2>/dev/null || true
+                  # ── Публичный ключ в masterdir, чтобы xbps мог проверить подпись ──
+                  mkdir -p masterdir/var/db/xbps/keys
                   cp -r common/repo-keys/* masterdir/var/db/xbps/keys/ 2>/dev/null || true
-                  sudo -Eu builder ./xbps-src binary-bootstrap 2>/dev/null || true
 
             - name: Build
               id: build_step

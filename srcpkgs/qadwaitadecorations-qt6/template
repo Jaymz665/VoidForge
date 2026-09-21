@@ -1,7 +1,7 @@
 # Template file for 'qadwaitadecorations-qt6'
 pkgname=qadwaitadecorations-qt6
 version=0.1.7
-revision=3
+revision=4
 _commit=22a97da98a8d91021c63600250711adf4ccf11d7
 build_style=cmake
 configure_args="-DUSE_QT6=true -DQT_FIND_PRIVATE_MODULES=ON"
