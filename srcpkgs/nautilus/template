@@ -27,6 +27,10 @@ checksum=a00db908fd65026cbd5dc634e12d189de8eba2b03f105d2425341768a5ee92fb
 build_options="gir"
 build_options_default="gir"
 
+pre_configure() {
+    export LDFLAGS="$LDFLAGS -Wl,--copy-dt-needed-entries"
+}
+
 pre_build() {
 	if [ "$CROSS_BUILD" ]; then
 		export GI_TYPELIB_PATH="${XBPS_CROSS_BASE}/usr/lib/girepository-1.0"
