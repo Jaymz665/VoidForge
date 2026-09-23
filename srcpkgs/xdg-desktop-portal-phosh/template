@@ -17,9 +17,9 @@ checksum=825f5b689135d6bc375f78178c46e93d42522273c3d6b7469d0477584689a250
 
 wrksrc="xdg-desktop-portal-phosh-${version}"
 
-pre_configure() {
-    vsed -i 's/\.rc/_rc/' meson.build
-}
+#pre_configure() {
+#    vsed -i 's/\.rc/_rc/' meson.build
+#}
 
 make_check=no 
 

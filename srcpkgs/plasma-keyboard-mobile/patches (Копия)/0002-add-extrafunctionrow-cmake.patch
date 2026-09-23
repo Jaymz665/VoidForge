@@ -1,0 +1,20 @@
+From: Your Name <you@example.com>
+Date: Thu, 27 Aug 2026 12:00:00 +0000
+Subject: [PATCH 2/3] Add ExtraFunctionRow.qml to CMakeLists.txt
+
+---
+ src/CMakeLists.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3a4b5c6..7d8e9f0 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -123,6 +123,7 @@ ecm_target_qml_sources(plasma-keyboard SOURCES
+     qml/LanguagePopup.qml
+     qml/LanguagePopupDelegate.qml
+     qml/DiacriticsOverlay.qml
++    qml/ExtraFunctionRow.qml
+     qml/OverlayWindow.qml
+ )
+ ecm_finalize_qml_module(plasma-keyboard)
