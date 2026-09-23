@@ -23,15 +23,4 @@ libcamera.so.0.7 libcamera-0.7.0_2
 libsofia-sip-ua-glib.so.3 sofia-sip-linphone-1.13.45_1
 libsofia-sip-ua.so.0 sofia-sip-linphone-1.13.45_1
 libssc.so.2 libssc-0.4.2_1
-libmutter-51.so.0 mutter-51.0_1
-libmutter-clutter-51.so.0 mutter-51.0_1
-libmutter-cogl-51.so.0 mutter-51.0_1
-libmutter-cogl-pango-51.so.0 mutter-51.0_1
-libmutter-mtk-51.so.0 mutter-51.0_1
-libgnome-qr-gtk-4.so.0 gnome-desktop-51.0_1
-libaccountsservice.so.1 accountsservice-26.27.3_0 ignore
-libgnome-desktop-3.so.21 gnome-desktop-51.0_1
-libgnome-desktop-4.so.2 gnome-desktop-51.0_1
-libgnome-bg-4.so.2 gnome-desktop-51.0_1
-libgnome-rr-4.so.2 gnome-desktop-51.0_1
-libgnome-qr-gtk-4.so.0 gnome-desktop-51.0_1
+
