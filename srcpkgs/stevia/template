@@ -1,0 +1,57 @@
+# Template file for 'stevia'
+pkgname=stevia
+version=0.52.0
+revision=1
+build_style=meson
+configure_args="
+    -Db_lto=true
+    -Dman=true
+    -Dwordlist=/usr/share/dict/american-english"
+hostmakedepends="
+    meson
+    pkg-config
+    python3-docutils
+    wayland-devel
+    gettext"
+makedepends="
+    dconf-devel
+    elogind-devel
+    feedbackd-devel
+    glib-devel
+    gmobile-devel
+    gnome-desktop-devel
+    gtk+3-devel
+    hunspell-devel
+    json-glib-devel
+    libhandy1-devel
+    presage-devel
+    wayland-protocols"
+depends="
+    hunspell-en
+    stevia-schemas>=${version}_${revision}"
+short_desc="Alternative OSK for phosh"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="GPL-3.0-or-later"
+homepage="https://gitlab.gnome.org/World/Phosh/stevia"
+distfiles="https://gitlab.gnome.org/World/Phosh/stevia/-/archive/v${version}/stevia-v${version}.tar.gz"
+checksum=df57e702b755e9fba72aa679ab7e8af61a6137e7ef9195a57a9c15798da726fa
+
+provides="phosh-keyboard-${version}_${revision} phosh-osk-stub-${version}_${revision}"
+provider_priority=1
+conflicts="squeekboard>=0"
+replaces="squeekboard>=0"
+
+case "$XBPS_TARGET_MACHINE" in
+    armhf|armv7l) ;;
+    *) makedepends+=" uim-devel" ;;
+esac
+
+make_check=no
+
+stevia-schemas_package() {
+    short_desc="Stevia schemas"
+    archs=noarch
+    pkg_install() {
+        vmove "usr/share/glib-2.0/schemas/*"
+    }
+}

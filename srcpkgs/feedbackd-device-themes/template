@@ -1,0 +1,22 @@
+# Template file for 'feedbackd-device-themes'
+pkgname=feedbackd-device-themes
+version=0.8.9
+revision=1
+wrksrc="${pkgname}-${version}"
+build_style=meson
+hostmakedepends="meson pkg-config json-glib"
+short_desc="Feedbackd device themes for different devices"
+maintainer="Jaymz <your-email@example.com>"
+license="GPL-3.0-or-later"
+homepage="https://gitlab.freedesktop.org/feedbackd/feedbackd-device-themes"
+distfiles="https://sources.phosh.mobi/releases/feedbackd-device-themes/feedbackd-device-themes-${version}.tar.xz"
+checksum=b3892d7691c965ab8a126be3f2085763c58ab35ccd6e17e21a4a150656341d9f
+archs="aarch64 armv7l x86_64 i686"
+
+post_install() {
+
+	if [ -d "${DESTDIR}/usr/share/feedbackd/themes" ]; then
+		msg_normal "✓ Themes installed successfully\n"
+		ls -la ${DESTDIR}/usr/share/feedbackd/themes/
+	fi
+}

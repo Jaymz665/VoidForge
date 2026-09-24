@@ -1,0 +1,116 @@
+# Template file for 'phosh'
+pkgname=phosh
+version=0.52.1
+revision=3
+wrksrc="${pkgname}-${version}"
+build_style=meson
+configure_args="
+    -Dcompositor=phoc
+    -Dphoc_tests=disabled
+    -Dman=true
+    -Db_lto=true
+    -Dintrospection=false
+    -Dgtk_doc=false"
+hostmakedepends="meson pkg-config wayland-devel glib-devel gettext gtk+3 python3-docutils"
+makedepends="callaudiod-devel elogind-devel evince-devel evolution-data-server-devel
+    feedbackd-devel gcr-devel glib-devel gmobile-devel gnome-bluetooth-devel gnome-desktop-devel
+    gtk+3-devel libadwaita-devel libgudev-devel libhandy1-devel libsecret-devel
+    pam-devel ModemManager-devel NetworkManager-devel polkit-devel
+    pulseaudio-devel qrcodegen upower-devel wayland-protocols dbus-devel"
+depends="
+    phosh-schemas>=${version}_${revision}
+    phoc
+    stevia
+    gsettings-desktop-schemas
+    elogind
+    NetworkManager
+    upower
+    gnome-session
+    gnome-settings-daemon
+    dbus
+    dbus-x11"
+short_desc="Wayland shell for GNOME on mobile devices"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="GPL-3.0-or-later"
+homepage="https://gitlab.gnome.org/World/Phosh/phosh"
+distfiles="https://sources.phosh.mobi/releases/phosh/phosh-${version}.tar.xz"
+checksum=81b03db9574557e866943cb6bb233c22cb28e162809e58f83e0b4cbde41e11a0
+
+make_check=no
+
+post_install() {
+    # Void использует /usr/lib, meson ставит часть файлов в /usr/lib64.
+    # Переносим содержимое и удаляем lib64 из DESTDIR, чтобы он не утёк в подпакеты.
+    if [ -e "${DESTDIR}/usr/lib64" ]; then
+        mkdir -p "${DESTDIR}/usr/lib"
+        if [ ! -L "${DESTDIR}/usr/lib64" ]; then
+            cp -a "${DESTDIR}/usr/lib64/." "${DESTDIR}/usr/lib/"
+        fi
+        rm -rf "${DESTDIR}/usr/lib64"
+    fi
+    vlicense COPYING
+}
+
+phosh-devel_package() {
+    short_desc="Phosh development files"
+    depends="phosh>=${version}_${revision}"
+    pkg_install() {
+        set +f
+        for d in \
+            usr/include/phosh \
+            usr/lib/pkgconfig \
+            usr/share/gir-1.0 \
+            usr/share/vala \
+            usr/share/gtk-doc
+        do
+            [ -d "${DESTDIR}/${d}" ] || continue
+            for f in "${DESTDIR}/${d}"/*; do
+                [ -e "${f}" ] || continue
+                vmove "${f#${DESTDIR}/}"
+            done
+        done
+        set -f
+        # 00-libdir hook создаёт symlink PKGDESTDIR/usr/lib64 -> lib.
+        # pkglint его не любит — убираем.
+        rm -f "${PKGDESTDIR}/usr/lib64"
+    }
+}
+
+phosh-schemas_package() {
+    short_desc="Phosh schemas"
+    archs=noarch
+    pkg_install() {
+        d=usr/share/glib-2.0/schemas
+        if [ -d "${DESTDIR}/${d}" ]; then
+            mkdir -p "${PKGDESTDIR}/${d}"
+            cp -a "${DESTDIR}/${d}/." "${PKGDESTDIR}/${d}/"
+            rm -rf "${DESTDIR:?}/${d}"
+        fi
+        rm -f "${PKGDESTDIR}/usr/lib64"
+    }
+}
+
+phosh-plugins_package() {
+    short_desc="Phosh plugins"
+    pkg_install() {
+        for d in usr/lib/phosh/plugins usr/share/phosh/plugins; do
+            if [ -d "${DESTDIR}/${d}" ]; then
+                mkdir -p "${PKGDESTDIR}/${d}"
+                cp -a "${DESTDIR}/${d}/." "${PKGDESTDIR}/${d}/"
+                rm -rf "${DESTDIR:?}/${d}"
+            fi
+        done
+        rm -f "${PKGDESTDIR}/usr/lib64"
+    }
+}
+
+phosh-portalsconf_package() {
+    short_desc="Phosh XDG desktop portal configuration"
+    archs=noarch
+    pkg_install() {
+        if [ -d "${DESTDIR}/usr/share/xdg-desktop-portal" ]; then
+            vmove usr/share/xdg-desktop-portal/phosh-portals.conf
+        fi
+        rm -f "${PKGDESTDIR}/usr/lib64"
+    }
+}

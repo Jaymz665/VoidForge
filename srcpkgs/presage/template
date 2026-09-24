@@ -1,0 +1,59 @@
+# Template file for 'presage'
+pkgname=presage
+version=0.9.1
+revision=1
+build_style=gnu-configure
+configure_args="
+    --sysconfdir=/etc
+    --localstatedir=/var
+    --enable-documentation"
+hostmakedepends="
+    autoconf
+    automake
+    libtool
+    pkg-config
+    doxygen
+    graphviz
+    help2man
+    gettext"
+makedepends="
+    sqlite-devel
+    tinyxml-devel"
+short_desc="An intelligent predictive text entry system"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="GPL-3.0-or-later"
+homepage="https://presage.sourceforge.io/"
+distfiles="https://downloads.sourceforge.net/project/presage/presage/${version}/presage-${version}.tar.gz"
+checksum=5ed567e350402a1d72c9053c78ecec3be710b7e72153a0223c6d19a7fe58a366
+
+post_install() {
+    # la-файлы в Void не используются
+    rm -f "${DESTDIR}"/usr/lib/*.la
+}
+
+presage-devel_package() {
+    short_desc="An intelligent predictive text entry system - development files"
+    depends="presage>=${version}_${revision} sqlite-devel tinyxml-devel"
+    pkg_install() {
+        vmove "usr/include/*"
+        vmove "usr/lib/lib*.so"
+    }
+}
+
+presage-static_package() {
+    short_desc="An intelligent predictive text entry system - static libraries"
+    depends="presage-devel>=${version}_${revision}"
+    pkg_install() {
+        vmove "usr/lib/lib*.a"
+    }
+}
+
+presage-doc_package() {
+    short_desc="An intelligent predictive text entry system - documentation"
+    archs=noarch
+    pkg_install() {
+        vmove usr/share/presage/html
+        vmove usr/share/presage/getting_started.txt
+        vmove usr/share/presage/python_binding.txt
+    }
+}
