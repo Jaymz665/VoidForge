@@ -5,7 +5,7 @@ revision=2
 wrksrc="${pkgname}-${version}"
 build_style=meson
 configure_args="
-    -Dembed-wlroots=disabled
+    -Dembed-wlroots=enabled
     --default-library=static
     -Dtests=false
     -Dwlroots:werror=false"
@@ -39,31 +39,43 @@ makedepends="
     MesaLib-devel
     pixman-devel
     wayland-protocols
-    vulkan-loader-devel
-    wlroots0.19-devel"
+    vulkan-loader-devel"
 short_desc="Wlroots-based phone compositor for Phosh"
-maintainer="Jaymz665"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
 license="GPL-3.0-or-later"
 homepage="https://gitlab.gnome.org/World/Phosh/phoc"
 distfiles="${homepage}/-/archive/v${version}/${pkgname}-v${version}.tar.gz
-    https://gitlab.gnome.org/GNOME/gvdb/-/archive/4758f6fb7f889e074e13df3f914328f3eecb1fd3/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz"
-checksum="817aad0114bc5e5a7ccc3ef54ce545bf1922a9c0afb2f91ccd8f91b1179aaef1
-    da3680bd38314546a915df5ea265f8c963a42ff5ddc7d69dc1b339775f05dbd6"
+    https://gitlab.gnome.org/GNOME/gvdb/-/archive/4758f6fb7f889e074e13df3f914328f3eecb1fd3/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz
+    https://gitlab.gnome.org/Infrastructure/Mirrors/lorry-mirrors/gitlab_freedesktop_org/wlroots/wlroots/-/archive/0.19.2/wlroots-0.19.2.tar.gz"
+checksum="7f8e529e2767e87aa15b92a588a9501add821d6c487d1745f0543eb6d7d4ee68
+ da3680bd38314546a915df5ea265f8c963a42ff5ddc7d69dc1b339775f05dbd6
+ f0530ecaa8739d15f97bd1e1edddb77e281d57e42d4263fccb67157f71730d17"
 
 post_extract() {
-    # Оба архива распаковались в ${wrksrc} (phoc-0.52.0) своими подпапками.
-    # 1) Содержимое phoc-v0.52.0/ переносим наверх в ${wrksrc}.
+    # 1) phoc: содержимое phoc-v0.52.0/ переносим наверх в wrksrc
     if [ -d "${wrksrc}/${pkgname}-v${version}" ]; then
         find "${wrksrc}/${pkgname}-v${version}" -mindepth 1 -maxdepth 1 \
             -exec mv -t "${wrksrc}/" {} +
         rmdir "${wrksrc}/${pkgname}-v${version}"
     fi
 
-    # 2) Папку от распаковки gvdb удаляем и распаковываем gvdb в subprojects/gvdb.
+    # 2) gvdb — в subprojects/gvdb
     rm -rf "${wrksrc}"/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3
     mkdir -p "${wrksrc}/subprojects/gvdb"
     bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz" \
         -C "${wrksrc}/subprojects/gvdb" --strip-components=1
+
+    # 3) wlroots — в subprojects/wlroots-0.19.x (имя из wlroots.wrap)
+    rm -rf "${wrksrc}"/wlroots-0.19.2
+    mkdir -p "${wrksrc}/subprojects/wlroots-0.19.x"
+    bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/wlroots-0.19.2.tar.gz" \
+        -C "${wrksrc}/subprojects/wlroots-0.19.x" --strip-components=1
+
+    # 4) Применяем патч phoc к wlroots, если он есть
+    patch_file=$(find "${wrksrc}" -name '0001-Revert-layer-shell-error-on-0-dimension-without-anch.patch' -print -quit)
+    if [ -n "${patch_file}" ]; then
+        patch -d "${wrksrc}/subprojects/wlroots-0.19.x" -p1 < "${patch_file}"
+    fi
 }
 
 post_install() {
