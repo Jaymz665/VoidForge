@@ -1,11 +1,11 @@
 # Template file for 'phoc'
 pkgname=phoc
 version=0.52.0
-revision=1
-wrksrc="${pkgname}-v${version}"
+revision=2
+wrksrc="${pkgname}-${version}"
 build_style=meson
 configure_args="
-    -Dembed-wlroots=enabled
+    -Dembed-wlroots=disabled
     --default-library=static
     -Dtests=false
     -Dwlroots:werror=false"
@@ -45,8 +45,26 @@ short_desc="Wlroots-based phone compositor for Phosh"
 maintainer="Jaymz665"
 license="GPL-3.0-or-later"
 homepage="https://gitlab.gnome.org/World/Phosh/phoc"
-distfiles="https://sources.phosh.mobi/releases/phoc/phoc-${version}.tar.xz"
-checksum=817aad0114bc5e5a7ccc3ef54ce545bf1922a9c0afb2f91ccd8f91b1179aaef1
+distfiles="${homepage}/-/archive/v${version}/${pkgname}-v${version}.tar.gz
+    https://gitlab.gnome.org/GNOME/gvdb/-/archive/4758f6fb7f889e074e13df3f914328f3eecb1fd3/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz"
+checksum="817aad0114bc5e5a7ccc3ef54ce545bf1922a9c0afb2f91ccd8f91b1179aaef1
+    da3680bd38314546a915df5ea265f8c963a42ff5ddc7d69dc1b339775f05dbd6"
+
+post_extract() {
+    # Оба архива распаковались в ${wrksrc} (phoc-0.52.0) своими подпапками.
+    # 1) Содержимое phoc-v0.52.0/ переносим наверх в ${wrksrc}.
+    if [ -d "${wrksrc}/${pkgname}-v${version}" ]; then
+        find "${wrksrc}/${pkgname}-v${version}" -mindepth 1 -maxdepth 1 \
+            -exec mv -t "${wrksrc}/" {} +
+        rmdir "${wrksrc}/${pkgname}-v${version}"
+    fi
+
+    # 2) Папку от распаковки gvdb удаляем и распаковываем gvdb в subprojects/gvdb.
+    rm -rf "${wrksrc}"/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3
+    mkdir -p "${wrksrc}/subprojects/gvdb"
+    bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz" \
+        -C "${wrksrc}/subprojects/gvdb" --strip-components=1
+}
 
 post_install() {
     if [ -d "${wrksrc}/LICENSES" ]; then
@@ -55,9 +73,14 @@ post_install() {
     fi
 }
 
+phoc_package() {
+    depends="phoc-schemas>=${version}_${revision}"
+}
+
 phoc-schemas_package() {
     short_desc="Phoc schemas"
+    archs=noarch
     pkg_install() {
-        vmove usr/share/glib-2.0/schemas
+        vmove "usr/share/glib-2.0/schemas/*"
     }
 }

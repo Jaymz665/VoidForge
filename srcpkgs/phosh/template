@@ -20,6 +20,7 @@ makedepends="callaudiod-devel elogind-devel evince-devel evolution-data-server-d
 depends="
     phosh-schemas>=${version}_${revision}
     phoc
+    phoc-schemas
     stevia
     gsettings-desktop-schemas
     elogind
