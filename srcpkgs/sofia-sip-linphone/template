@@ -15,7 +15,6 @@ replaces="sofia-sip<0"
 distfiles="https://github.com/BelledonneCommunications/sofia-sip/archive/${version}bc.tar.gz"
 checksum=12b4a28a3de90d06ea24927f8266a16f84974a132ce2965e3d5bd02dbdde942d
 
-# torture_su_root test fails
 make_check=no
 
 pre_configure() {

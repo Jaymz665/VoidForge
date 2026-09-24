@@ -52,26 +52,22 @@ checksum="7f8e529e2767e87aa15b92a588a9501add821d6c487d1745f0543eb6d7d4ee68
  f0530ecaa8739d15f97bd1e1edddb77e281d57e42d4263fccb67157f71730d17"
 
 post_extract() {
-    # 1) phoc: содержимое phoc-v0.52.0/ переносим наверх в wrksrc
     if [ -d "${wrksrc}/${pkgname}-v${version}" ]; then
         find "${wrksrc}/${pkgname}-v${version}" -mindepth 1 -maxdepth 1 \
             -exec mv -t "${wrksrc}/" {} +
         rmdir "${wrksrc}/${pkgname}-v${version}"
     fi
 
-    # 2) gvdb — в subprojects/gvdb
     rm -rf "${wrksrc}"/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3
     mkdir -p "${wrksrc}/subprojects/gvdb"
     bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/gvdb-4758f6fb7f889e074e13df3f914328f3eecb1fd3.tar.gz" \
         -C "${wrksrc}/subprojects/gvdb" --strip-components=1
 
-    # 3) wlroots — в subprojects/wlroots-0.19.x (имя из wlroots.wrap)
     rm -rf "${wrksrc}"/wlroots-0.19.2
     mkdir -p "${wrksrc}/subprojects/wlroots-0.19.x"
     bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/wlroots-0.19.2.tar.gz" \
         -C "${wrksrc}/subprojects/wlroots-0.19.x" --strip-components=1
 
-    # 4) Применяем патч phoc к wlroots, если он есть
     patch_file=$(find "${wrksrc}" -name '0001-Revert-layer-shell-error-on-0-dimension-without-anch.patch' -print -quit)
     if [ -n "${patch_file}" ]; then
         patch -d "${wrksrc}/subprojects/wlroots-0.19.x" -p1 < "${patch_file}"

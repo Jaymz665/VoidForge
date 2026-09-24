@@ -26,11 +26,6 @@ homepage="https://presage.sourceforge.io/"
 distfiles="https://downloads.sourceforge.net/project/presage/presage/${version}/presage-${version}.tar.gz"
 checksum=5ed567e350402a1d72c9053c78ecec3be710b7e72153a0223c6d19a7fe58a366
 
-post_install() {
-    # la-файлы в Void не используются
-    rm -f "${DESTDIR}"/usr/lib/*.la
-}
-
 presage-devel_package() {
     short_desc="An intelligent predictive text entry system - development files"
     depends="presage>=${version}_${revision} sqlite-devel tinyxml-devel"

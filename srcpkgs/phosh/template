@@ -39,8 +39,6 @@ checksum=81b03db9574557e866943cb6bb233c22cb28e162809e58f83e0b4cbde41e11a0
 make_check=no
 
 post_install() {
-    # Void использует /usr/lib, meson ставит часть файлов в /usr/lib64.
-    # Переносим содержимое и удаляем lib64 из DESTDIR, чтобы он не утёк в подпакеты.
     if [ -e "${DESTDIR}/usr/lib64" ]; then
         mkdir -p "${DESTDIR}/usr/lib"
         if [ ! -L "${DESTDIR}/usr/lib64" ]; then
@@ -70,8 +68,6 @@ phosh-devel_package() {
             done
         done
         set -f
-        # 00-libdir hook создаёт symlink PKGDESTDIR/usr/lib64 -> lib.
-        # pkglint его не любит — убираем.
         rm -f "${PKGDESTDIR}/usr/lib64"
     }
 }

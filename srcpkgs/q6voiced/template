@@ -13,10 +13,8 @@ distfiles="https://gitlab.postmarketos.org/postmarketOS/q6voiced/-/archive/${ver
 checksum="7e3b72edf40065d1348857b4e195cb2d05b466576d1ee42cf6ef1f05c2e46c3c"
 
 post_install() {
-	# Устанавливаем конфиг
 	vinstall ${FILESDIR}/q6voiced.conf 644 etc/default q6voiced
 	
-	# Устанавливаем сервис
 	vmkdir etc/sv/q6voiced
 	vinstall ${FILESDIR}/q6voiced/run 755 etc/sv/q6voiced
 }
