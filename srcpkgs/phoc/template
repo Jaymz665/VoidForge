@@ -46,7 +46,7 @@ maintainer="Jaymz665"
 license="GPL-3.0-or-later"
 homepage="https://gitlab.gnome.org/World/Phosh/phoc"
 distfiles="https://sources.phosh.mobi/releases/phoc/phoc-${version}.tar.xz"
-checksum=1f5688e1136b971f6d86cfb49a2fb3f8fbe13bae0f6099258d3a007a2707ee56
+checksum=817aad0114bc5e5a7ccc3ef54ce545bf1922a9c0afb2f91ccd8f91b1179aaef1
 
 post_install() {
     if [ -d "${wrksrc}/LICENSES" ]; then
