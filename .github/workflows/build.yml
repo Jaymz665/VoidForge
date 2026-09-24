@@ -124,7 +124,7 @@ jobs:
                   cd void-packages
                   git checkout --detach master
 
-            - name: Merge templates and edit shlibs
+            - name: Merge templates
               run: |
                   echo "==> syncing templates..."
                   if [ -d "extra/srcpkgs" ]; then
@@ -150,25 +150,6 @@ jobs:
                               echo "   - not present in upstream, skipping: $pkg"
                           fi
                       done < "extra/exclude.txt"
-                  fi
-
-                  SHLIBS_FILE="void-packages/common/shlibs"
-
-                  for f in extra/shlibs extra/shlibs_append; do
-                      if [ -f "$f" ]; then
-                          echo "   + applying $f"
-                          tr -d '\r' < "$f" >> "$SHLIBS_FILE"
-                          echo "" >> "$SHLIBS_FILE"
-                      fi
-                  done
-
-                  if [ -f "extra/shlibs_remove" ]; then
-                      while IFS= read -r line; do
-                          line=$(echo "$line" | tr -d '\r')
-                          [ -z "$line" ] && continue
-                          grep -vF "$line" "$SHLIBS_FILE" > "$SHLIBS_FILE.tmp" && mv "$SHLIBS_FILE.tmp" "$SHLIBS_FILE"
-                          echo "   - removed: $line"
-                      done < "extra/shlibs_remove"
                   fi
 
             - name: Prepare masterdir
@@ -238,6 +219,31 @@ jobs:
                   ls hostdir/binpkgs/*.xbps 2>/dev/null | head -5 || true
                   echo "=== masterdir/etc/xbps.d/20-voidforge.conf ==="
                   cat masterdir/etc/xbps.d/20-voidforge.conf || true
+
+                  # ── shlibs — ПОСЛЕ prepare.sh, иначе bootstrap их затирает ──
+                  echo "==> applying shlibs AFTER prepare..."
+                  SHLIBS_FILE="common/shlibs"
+
+                  for f in ../extra/shlibs ../extra/shlibs_append; do
+                      if [ -f "$f" ]; then
+                          echo "   + applying $f"
+                          tr -d '\r' < "$f" >> "$SHLIBS_FILE"
+                          echo "" >> "$SHLIBS_FILE"
+                      fi
+                  done
+
+                  if [ -f "../extra/shlibs_remove" ]; then
+                      while IFS= read -r line; do
+                          line=$(echo "$line" | tr -d '\r')
+                          [ -z "$line" ] && continue
+                          grep -vF "$line" "$SHLIBS_FILE" > "$SHLIBS_FILE.tmp" \
+                              && mv "$SHLIBS_FILE.tmp" "$SHLIBS_FILE"
+                          echo "   - removed: $line"
+                      done < "../extra/shlibs_remove"
+                  fi
+
+                  echo "=== verify shlibs ==="
+                  grep -E 'libpresage|libcallaudio|libfeedback' "$SHLIBS_FILE" || echo "!! not found"
 
             - name: Build
               id: build_step
