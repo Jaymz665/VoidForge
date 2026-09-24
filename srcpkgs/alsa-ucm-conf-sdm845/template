@@ -1,0 +1,19 @@
+# Template file for 'alsa-ucm-conf-sdm845'
+pkgname=alsa-ucm-conf-sdm845
+version=1
+revision=1
+_commit=70d89261a7d30273fba9c6e67a072699f9f88151
+wrksrc="alsa-ucm-conf-${_commit}"
+short_desc="ALSA UCM configuration for Qualcomm SDM845 devices"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="BSD-3-Clause"
+homepage="https://gitlab.com/sdm845-mainline/alsa-ucm-conf"
+distfiles="${homepage}/-/archive/${_commit}/alsa-ucm-conf-${_commit}.tar.gz"
+checksum=db47db7fdb35b99689fb847328d935f942684777cd3c53470029d48a5a35d327
+conflicts="soc-qcom-sdm845-ucm"
+provides="alsa-ucm-conf-${version}_${revision}"
+replaces="soc-qcom-sdm845-ucm>=0"
+
+do_install() {
+    vcopy ucm2 usr/share/alsa
+}
