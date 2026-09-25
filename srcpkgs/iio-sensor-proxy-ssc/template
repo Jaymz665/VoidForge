@@ -8,7 +8,7 @@ configure_args="-Dsystemdsystemunitdir=/usr/lib/systemd/system/
  -Db_lto=true 
  -Dssc-support=enabled"
 hostmakedepends="pkg-config glib-devel libxml2"
-makedepends="libgudev-devel polkit-devel libssc-devel"
+makedepends="libgudev-devel polkit-devel libssc-devel glib-devel"
 checkdepends="python3-dbusmock python3-psutil umockdev-devel gtk+3-devel"
 conflicts="iio-sensor-proxy>=0"
 shlib_provides="libssc.so.0"

@@ -5,16 +5,8 @@ revision=1
 wrksrc="${pkgname}-v${version}"
 build_style=meson
 configure_args="-Db_lto=true"
-hostmakedepends="
-    desktop-file-utils
-    gettext
-    glib-devel
-    gtk4-update-icon-cache
-    gtk-update-icon-cache
-    lm_sensors
-    meson
-    pkg-config
-    wayland-devel"
+hostmakedepends="desktop-file-utils gettext glib-devel gtk4-update-icon-cache
+gtk-update-icon-cache lm_sensors meson pkg-config wayland-devel"
 makedepends="
     cellbroadcastd-devel
     feedbackd-devel
@@ -31,7 +23,8 @@ makedepends="
     phoc-schemas
     phosh-devel
     phosh-schemas
-    pulseaudio-devel"
+    pulseaudio-devel
+    glib-devel"
 depends="
     phoc-schemas
     phosh-schemas

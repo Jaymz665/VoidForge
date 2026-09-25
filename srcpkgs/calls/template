@@ -4,7 +4,9 @@ version=50.0
 revision=1
 build_style=meson
 configure_args="-Db_lto=true $(vopt_bool tests tests)"
-hostmakedepends="desktop-file-utils gettext gobject-introspection meson ninja python3-docutils	vala pkg-config glib-devel  gtk-update-icon-cache gtk4-update-icon-cache gobject-introspection"
+hostmakedepends="pkg-config desktop-file-utils gettext gobject-introspection meson ninja
+python3-docutils vala pkg-config glib-devel gtk-update-icon-cache
+gtk4-update-icon-cache gobject-introspection"
 makedepends="
 	callaudiod-devel
 	evolution-data-server-devel
