@@ -1,0 +1,39 @@
+# Template file for 'firmware-nothing-spacewar'
+pkgname=firmware-nothing-spacewar
+version=3
+revision=1
+_commit="cc01a8900344afb8a8e254f7bb607d1b4affeb3c"
+wrksrc="${pkgname}-${_commit}"
+
+archs="aarch64"
+nostrip=yes
+noshlibprovides=yes
+noverifyrdeps=yes
+ignore_elf_dirs="/usr/share/qcom"
+
+short_desc="Firmware for Nothing Phone (1) [spacewar]"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="proprietary"
+homepage="https://github.com/mainlining/firmware-nothing-spacewar"
+distfiles="https://github.com/mainlining/firmware-nothing-spacewar/archive/${_commit}/${pkgname}-${_commit}.tar.gz"
+checksum=3cc55c66647ffce3fcd532029f1b684b23cb90f2d243f88941576496c1a1a003
+
+do_install() {
+    local f dest
+
+    find . -type f | while read -r f; do
+        f="${f#./}"
+        case "$f" in
+            lib/*) dest="usr/${f}" ;;
+            usr/*) dest="${f}" ;;
+            *)     continue ;;
+        esac
+        vinstall "${PWD}/${f}" 644 "$(dirname "$dest")"
+    done
+
+    if [ -f LICENSE ]; then
+        vlicense LICENSE
+    elif [ -f LICENSE.md ]; then
+        vlicense LICENSE.md
+    fi
+}

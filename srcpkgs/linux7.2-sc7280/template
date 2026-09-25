@@ -1,0 +1,98 @@
+# Template file for 'linux7.2-sc7280'
+pkgname=linux7.2-sc7280
+version=7.2.2
+revision=1
+_flavor="sc7280"
+_series="${version%.*}"
+_tag="v${version}-${_flavor}"
+_repo="linux"
+
+archs="aarch64"
+build_style=gnu-makefile
+
+hostmakedepends="
+    bc
+    bison
+    clang
+    elfutils-devel
+    flex
+    kmod
+    lld
+    llvm
+    openssl-devel
+    pahole
+    perl
+    python3
+    tar
+    xz
+    zstd"
+
+short_desc="Linux kernel ${_series} for Qualcomm SC7280/SM7325/QCM6490"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="GPL-2.0-only"
+homepage="https://github.com/sc7280-mainline/linux"
+distfiles="https://github.com/sc7280-mainline/${_repo}/archive/refs/tags/${_tag}/${_repo}-${_tag}.tar.gz"
+checksum=a14e56846e451c4295a43f192cd0515ed403dccba6b1f28d01c4e1962517d80d
+wrksrc="${_repo}-${version}-${_flavor}"
+
+_arch="arm64"
+
+do_configure() {
+    if [ -n "$XBPS_CROSS_TRIPLET" ]; then
+        export CROSS_COMPILE="${XBPS_CROSS_TRIPLET}-"
+    fi
+    export LLVM=1 ARCH=${_arch}
+
+    cp "${FILESDIR}/${_flavor}.config" .config
+
+    sed -i \
+        -e "s|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"-${_flavor}\"|" \
+        -e 's|^CONFIG_LOCALVERSION_AUTO=y|# CONFIG_LOCALVERSION_AUTO is not set|' \
+        .config
+
+    make ${makejobs} olddefconfig
+}
+
+do_build() {
+    if [ -n "$XBPS_CROSS_TRIPLET" ]; then
+        export CROSS_COMPILE="${XBPS_CROSS_TRIPLET}-"
+    fi
+    export LLVM=1 ARCH=${_arch}
+
+    make ${makejobs} all
+}
+
+do_install() {
+    if [ -n "$XBPS_CROSS_TRIPLET" ]; then
+        export CROSS_COMPILE="${XBPS_CROSS_TRIPLET}-"
+    fi
+    export LLVM=1 ARCH=${_arch}
+
+    make ${makejobs} \
+        INSTALL_MOD_PATH="${DESTDIR}/usr" \
+        INSTALL_MOD_STRIP=1 \
+        INSTALL_DTBS_PATH="${DESTDIR}/boot/dtbs" \
+        modules_install dtbs_install
+
+    vmkdir boot
+
+    if [ -f "arch/${_arch}/boot/vmlinuz.efi" ]; then
+        cp "arch/${_arch}/boot/vmlinuz.efi" "${DESTDIR}/boot/linux.efi"
+    fi
+
+    if [ -f "arch/${_arch}/boot/vmlinuz" ]; then
+        cp "arch/${_arch}/boot/vmlinuz" "${DESTDIR}/boot/vmlinuz"
+    elif [ -f "arch/${_arch}/boot/Image.gz" ]; then
+        cp "arch/${_arch}/boot/Image.gz" "${DESTDIR}/boot/vmlinuz"
+    fi
+
+    vmkdir usr/share/kernel/${_flavor}
+    cp include/config/kernel.release "${DESTDIR}/usr/share/kernel/${_flavor}/"
+
+    rm -f ${DESTDIR}/usr/lib/modules/*/build
+    rm -f ${DESTDIR}/usr/lib/modules/*/source
+}
+
+post_install() {
+    vlicense COPYING
+}
