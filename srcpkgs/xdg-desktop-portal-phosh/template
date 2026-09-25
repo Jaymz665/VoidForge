@@ -4,7 +4,7 @@ version=0.52.0
 revision=1
 build_style=meson
 build_helper=rust
-hostmakedepends="pkg-config meson glib-devel python3-docutils libadwaita-devel rust cargo rust-std cross-aarch64-linux-gnu"
+hostmakedepends="pkg-config meson gettext glib-devel python3-docutils libadwaita-devel rust cargo rust-std cross-aarch64-linux-gnu"
 makedepends="gnome-desktop-devel xdg-desktop-portal libadwaita-devel"
 depends="gsettings-desktop-schemas xdg-desktop-portal"
 short_desc="xdg-desktop-portal implementation using GTK/GNOME/Phosh"
@@ -18,7 +18,9 @@ checksum=825f5b689135d6bc375f78178c46e93d42522273c3d6b7469d0477584689a250
 wrksrc="xdg-desktop-portal-phosh-${version}"
 
 pre_configure() {
-    vsed -i 's/\.rc/_rc/' meson.build
+    if grep -q '\.rc' meson.build; then
+        vsed -i 's/\.rc/_rc/' meson.build
+    fi
 }
 
 make_check=no 

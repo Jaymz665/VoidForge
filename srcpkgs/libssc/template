@@ -11,7 +11,7 @@ maintainer="jaymz665"
 license="GPL-3.0-or-later"
 homepage="https://libssc.dylanvanassche.be/"
 distfiles="https://codeberg.org/DylanVanAssche/libssc/archive/v${version}.tar.gz"
-checksum=cd29d26c226b45a1931695863bdc7f267e095f1e09b53c1383fb626a3c69969a
+checksum=e9ab6e1fa24e3f2a675f95c6270f2a733ec61e60c653c3397f2b4aec679cb00c
 
 post_install() {
     if [ -d "${DESTDIR}/usr/include/libssc/mocking" ]; then

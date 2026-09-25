@@ -1,0 +1,82 @@
+# Template file for 'phosh-mobile-settings'
+pkgname=phosh-mobile-settings
+version=0.52.0
+revision=1
+wrksrc="${pkgname}-v${version}"
+build_style=meson
+configure_args="-Db_lto=true"
+hostmakedepends="
+    desktop-file-utils
+    gettext
+    glib-devel
+    gtk4-update-icon-cache
+    gtk-update-icon-cache
+    lm_sensors
+    meson
+    pkg-config
+    wayland-devel"
+makedepends="
+    cellbroadcastd-devel
+    feedbackd-devel
+    gmobile-devel
+    gnome-desktop-devel
+    gsound-devel
+    gtk4-devel
+    json-glib-devel
+    libadwaita-devel
+    libportal-devel
+    libportal-gtk4-devel
+    libsensors-devel
+    libyaml-devel
+    phoc-schemas
+    phosh-devel
+    phosh-schemas
+    pulseaudio-devel"
+depends="
+    phoc-schemas
+    phosh-schemas
+    stevia-schemas"
+checkdepends="
+    gsettings-desktop-schemas
+    phosh
+    xvfb-run"
+short_desc="Settings app for mobile specific things"
+maintainer="Jaymz665 <jaymz665@gmail.com>"
+license="GPL-3.0-or-later"
+homepage="https://gitlab.gnome.org/World/Phosh/phosh-mobile-settings"
+distfiles="${homepage}/-/archive/v${version}/${pkgname}-v${version}.tar.gz
+    https://gitlab.gnome.org/GNOME/libgnome-volume-control/-/archive/5f9768a2eac29c1ed56f1fbb449a77a3523683b6/libgnome-volume-control-5f9768a2eac29c1ed56f1fbb449a77a3523683b6.tar.gz"
+checksum="1bc95d7bd29c9dc1e3233bf6c1475ce668bef305166f51bcc53ae8a3319d6378
+    0163f8e7250d46a18905b04e966f3a4c849a3afb810ca1e862cb685f8a92bc2e"
+
+if [ -z "$XBPS_CHECK_PKGS" ]; then
+    make_check_args="--suite unit"
+fi
+
+post_extract() {
+    # 1) GitLab-архив распаковывается в phosh-mobile-settings-v0.52.0/
+    if [ -d "${wrksrc}/${pkgname}-v${version}" ]; then
+        find "${wrksrc}/${pkgname}-v${version}" -mindepth 1 -maxdepth 1 \
+            -exec mv -t "${wrksrc}/" {} +
+        rmdir "${wrksrc}/${pkgname}-v${version}"
+    fi
+
+    # 2) gvc — в subprojects/gvc
+    rm -rf "${wrksrc}"/libgnome-volume-control-*
+    mkdir -p "${wrksrc}/subprojects/gvc"
+    bsdtar -xf "${XBPS_SRCDISTDIR}/${pkgname}-${version}/libgnome-volume-control-5f9768a2eac29c1ed56f1fbb449a77a3523683b6.tar.gz" \
+        -C "${wrksrc}/subprojects/gvc" --strip-components=1
+
+    # 3) Патч из gvc.wrap (diff_files)
+    patch_file=$(find "${wrksrc}" -name '0001-mixer-control-Don-t-leak-ui-device.patch' -print -quit)
+    if [ -n "${patch_file}" ]; then
+        patch -d "${wrksrc}/subprojects/gvc" -p1 < "${patch_file}" || true
+    fi
+}
+
+phosh-mobile-settings-lang_package() {
+    short_desc+=" - language files"
+    pkg_install() {
+        vmove "usr/share/locale/*"
+    }
+}
