@@ -47,7 +47,7 @@ homepage="https://gitlab.gnome.org/World/Phosh/phosh-mobile-settings"
 distfiles="${homepage}/-/archive/v${version}/${pkgname}-v${version}.tar.gz
     https://gitlab.gnome.org/GNOME/libgnome-volume-control/-/archive/5f9768a2eac29c1ed56f1fbb449a77a3523683b6/libgnome-volume-control-5f9768a2eac29c1ed56f1fbb449a77a3523683b6.tar.gz"
 checksum="1bc95d7bd29c9dc1e3233bf6c1475ce668bef305166f51bcc53ae8a3319d6378
-    0163f8e7250d46a18905b04e966f3a4c849a3afb810ca1e862cb685f8a92bc2e"
+ 0163f8e7250d46a18905b04e966f3a4c849a3afb810ca1e862cb685f8a92bc2e"
 
 if [ -z "$XBPS_CHECK_PKGS" ]; then
     make_check_args="--suite unit"
