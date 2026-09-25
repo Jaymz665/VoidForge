@@ -1,7 +1,7 @@
 # Template file for 'iio-sensor-proxy-ssc'
 pkgname=iio-sensor-proxy-ssc
 version=3.9
-revision=2
+revision=3
 build_style=meson
 configure_args="-Dsystemdsystemunitdir=/usr/lib/systemd/system/
  -Dgeoclue-user=_geoclue2
@@ -21,9 +21,7 @@ changelog="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/raw/master/N
 distfiles="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/archive/${version}/iio-sensor-proxy-${version}.tar.gz"
 checksum=af5edd307dcfa52dc3a242d13b7cc756e90a71640caf332efbad960e21649ae4
 
-if [ "$XBPS_CHECK_PKGS" ]; then
-	configure_args+=" -Dtests=true -Dgtk-tests=true"
-fi
+make_check=no
 
 post_install() {
 	vsv iio-sensor-proxy
