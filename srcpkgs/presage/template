@@ -26,12 +26,15 @@ homepage="https://presage.sourceforge.io/"
 distfiles="https://downloads.sourceforge.net/project/presage/presage/${version}/presage-${version}.tar.gz"
 checksum=5ed567e350402a1d72c9053c78ecec3be710b7e72153a0223c6d19a7fe58a366
 
+post_patch() {
+    if [ -n "$XBPS_CROSS_BUILD" ]; then
+        find . \( -name 'Makefile.in' -o -name 'Makefile.am' \) -exec \
+            sed -i 's|^\(\s*\)help2man |\1true |' {} +
+    fi
+}
+
 pre_build() {
     if [ -n "$XBPS_CROSS_BUILD" ]; then
-        mkdir -p "$wrksrc/.xbps-stub"
-        printf '#!/bin/sh\nexit 0\n' > "$wrksrc/.xbps-stub/help2man"
-        chmod +x "$wrksrc/.xbps-stub/help2man"
-        export PATH="$wrksrc/.xbps-stub:$PATH"
         export QEMU_LD_PREFIX="${XBPS_CROSS_BASE}"
     fi
 }
