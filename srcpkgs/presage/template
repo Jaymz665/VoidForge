@@ -1,7 +1,7 @@
 # Template file for 'presage'
 pkgname=presage
 version=0.9.1
-revision=2
+revision=3
 build_style=gnu-configure
 configure_args="
     --sysconfdir=/etc
@@ -28,11 +28,23 @@ checksum=5ed567e350402a1d72c9053c78ecec3be710b7e72153a0223c6d19a7fe58a366
 
 post_patch() {
     if [ -n "$XBPS_CROSS_BUILD" ]; then
-        find . -type f \( -name 'Makefile.in' -o -name 'Makefile.am' \) -exec \
-            sed -i \
-                -e 's|^HELP2MAN *= *.*|HELP2MAN = true|' \
-                -e 's|^\(\s*\)help2man |\1true |' \
-                {} +
+        echo ">>> post_patch: patching help2man for cross build"
+        find "$wrksrc" -type f \( -name 'Makefile.in' -o -name 'Makefile.am' \) -exec \
+            sed -i 's/help2man/true/g' {} +
+        echo ">>> post_patch: remaining help2man refs:"
+        find "$wrksrc" -name 'Makefile.in' -exec grep -Hn 'help2man' {} \; || echo "   none"
+    else
+        echo ">>> post_patch: native build, not patching"
+    fi
+}
+
+post_configure() {
+    if [ -n "$XBPS_CROSS_BUILD" ]; then
+        echo ">>> post_configure: patching help2man in generated Makefiles"
+        find "$wrksrc" -type f -name 'Makefile' -exec \
+            sed -i 's/help2man/true/g' {} +
+        echo ">>> post_configure: remaining help2man refs in Makefile:"
+        find "$wrksrc" -name 'Makefile' -exec grep -Hn 'help2man' {} \; || echo "   none"
     fi
 }
 
