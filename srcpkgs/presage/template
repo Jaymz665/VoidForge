@@ -36,17 +36,19 @@ post_patch() {
 
 post_configure() {
     if [ -n "$XBPS_CROSS_BUILD" ]; then
-        # 2. Патч в resources/Makefile — вызовы text2ngram должны идти через qemu
-
         find "$wrksrc" -type f -name 'Makefile' -exec \
             sed -i 's/help2man/true/g' {} +
 
         if [ -f "$wrksrc/resources/Makefile" ]; then
-            sed -i \
-                -e 's|\.\./src/tools/text2ngram|qemu-aarch64 -L '"${XBPS_CROSS_BASE}"' ../src/tools/.libs/text2ngram|g' \
-                "$wrksrc/resources/Makefile"
-            echo ">>> patched text2ngram calls in resources/Makefile:"
+            echo ">>> patching resources/Makefile text2ngram calls"
             grep -n 'text2ngram' "$wrksrc/resources/Makefile" || true
+            sed -i \
+                -e 's|@\$(top_builddir)/src/tools/text2ngram|@qemu-aarch64 -L '"${XBPS_CROSS_BASE}"' $(top_builddir)/src/tools/.libs/text2ngram|g' \
+                "$wrksrc/resources/Makefile"
+            echo ">>> after patch:"
+            grep -n 'text2ngram' "$wrksrc/resources/Makefile" || true
+        else
+            echo ">>> resources/Makefile not found"
         fi
     fi
 }
