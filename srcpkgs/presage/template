@@ -1,7 +1,7 @@
 # Template file for 'presage'
 pkgname=presage
 version=0.9.1
-revision=3
+revision=4
 build_style=gnu-configure
 configure_args="
     --sysconfdir=/etc
@@ -15,7 +15,8 @@ hostmakedepends="
     doxygen
     graphviz
     help2man
-    gettext"
+    gettext
+    qemu-user-static"
 makedepends="
     sqlite-devel
     tinyxml-devel"
@@ -28,23 +29,25 @@ checksum=5ed567e350402a1d72c9053c78ecec3be710b7e72153a0223c6d19a7fe58a366
 
 post_patch() {
     if [ -n "$XBPS_CROSS_BUILD" ]; then
-        echo ">>> post_patch: patching help2man for cross build"
         find "$wrksrc" -type f \( -name 'Makefile.in' -o -name 'Makefile.am' \) -exec \
             sed -i 's/help2man/true/g' {} +
-        echo ">>> post_patch: remaining help2man refs:"
-        find "$wrksrc" -name 'Makefile.in' -exec grep -Hn 'help2man' {} \; || echo "   none"
-    else
-        echo ">>> post_patch: native build, not patching"
     fi
 }
 
 post_configure() {
     if [ -n "$XBPS_CROSS_BUILD" ]; then
-        echo ">>> post_configure: patching help2man in generated Makefiles"
+        # 2. Патч в resources/Makefile — вызовы text2ngram должны идти через qemu
+
         find "$wrksrc" -type f -name 'Makefile' -exec \
             sed -i 's/help2man/true/g' {} +
-        echo ">>> post_configure: remaining help2man refs in Makefile:"
-        find "$wrksrc" -name 'Makefile' -exec grep -Hn 'help2man' {} \; || echo "   none"
+
+        if [ -f "$wrksrc/resources/Makefile" ]; then
+            sed -i \
+                -e 's|\.\./src/tools/text2ngram|qemu-aarch64 -L '"${XBPS_CROSS_BASE}"' ../src/tools/.libs/text2ngram|g' \
+                "$wrksrc/resources/Makefile"
+            echo ">>> patched text2ngram calls in resources/Makefile:"
+            grep -n 'text2ngram' "$wrksrc/resources/Makefile" || true
+        fi
     fi
 }
 
