@@ -1,6 +1,6 @@
 # Template file for 'linux7.2-sc7280'
 pkgname=linux7.2-sc7280
-version=7.2.2
+version=7.2.8
 revision=1
 _flavor="sc7280"
 _series="${version%.*}"
@@ -32,7 +32,7 @@ maintainer="Jaymz665 <jaymz665@gmail.com>"
 license="GPL-2.0-only"
 homepage="https://github.com/sc7280-mainline/linux"
 distfiles="https://github.com/sc7280-mainline/${_repo}/archive/refs/tags/${_tag}/${_repo}-${_tag}.tar.gz"
-checksum=a14e56846e451c4295a43f192cd0515ed403dccba6b1f28d01c4e1962517d80d
+checksum=859ec1030ba4e68f30ba80ed0cdbafc0e5d2142261070c087d0b38145416c5b6
 wrksrc="${_repo}-${version}-${_flavor}"
 
 _arch="arm64"
