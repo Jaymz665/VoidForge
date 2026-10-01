@@ -12,7 +12,8 @@ hostmakedepends="
     pkg-config
     python3-docutils
     wayland-devel
-    gettext"
+    gettext
+    glib-devel"
 makedepends="
     dconf-devel
     elogind-devel
@@ -40,11 +41,6 @@ provides="phosh-keyboard-${version}_${revision} phosh-osk-stub-${version}_${revi
 provider_priority=1
 conflicts="squeekboard>=0"
 replaces="squeekboard>=0"
-
-case "$XBPS_TARGET_MACHINE" in
-    armhf|armv7l) ;;
-    *) makedepends+=" uim-devel" ;;
-esac
 
 make_check=no
 
