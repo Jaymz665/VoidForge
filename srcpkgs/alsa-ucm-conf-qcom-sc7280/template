@@ -1,7 +1,7 @@
 # Template file for 'alsa-ucm-conf-qcom-sc7280'
 pkgname=alsa-ucm-conf-qcom-sc7280
-version=5
-revision=3
+version=1.2.14
+revision=6
 _commit="46a53ef96fc18c2781305eb3e435fc98b1cd8a7a"
 wrksrc="alsa-ucm-config-${_commit}"
 
@@ -28,6 +28,22 @@ do_fetch() {
 }
 
 do_install() {
-	vmkdir usr/share/alsa
-	cp -r "${wrksrc}/ucm2" "${DESTDIR}/usr/share/alsa/"
+    vmkdir usr/share/alsa/ucm2
+    cp -a ucm2/Nothing "${DESTDIR}/usr/share/alsa/ucm2/"
+
+    vmkdir usr/share/alsa/ucm2/conf.d/sm8250
+    vinstall ucm2/conf.d/sm8250/NP1.conf 644 usr/share/alsa/ucm2/conf.d/sm8250
+
+    vmkdir usr/share/alsa/ucm2/conf.d/sm7325
+    vinstall ucm2/conf.d/sm7325/NP1.conf 644 usr/share/alsa/ucm2/conf.d/sm7325
+
+    vmkdir usr/share/alsa/ucm2/codecs/wcd938x
+    vinstall ucm2/codecs/wcd938x/AnalogMic2EnableSeq.conf 644 \
+        usr/share/alsa/ucm2/codecs/wcd938x
+    vinstall ucm2/codecs/wcd938x/AnalogMic2DisableSeq.conf 644 \
+        usr/share/alsa/ucm2/codecs/wcd938x
+
+    vmkdir usr/share/alsa/ucm2/codecs/qcom-lpass/tx-macro
+    vinstall ucm2/codecs/qcom-lpass/tx-macro/SoundwireMic5EnableSeq.conf 644 \
+        usr/share/alsa/ucm2/codecs/qcom-lpass/tx-macro
 }
