@@ -1,7 +1,7 @@
 # Template file for 'alsa-ucm-conf-qcom-sc7280'
 pkgname=alsa-ucm-conf-qcom-sc7280
-version=1.2.14
-revision=6
+version=5
+revision=4
 _commit="46a53ef96fc18c2781305eb3e435fc98b1cd8a7a"
 wrksrc="alsa-ucm-config-${_commit}"
 
