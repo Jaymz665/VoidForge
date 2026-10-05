@@ -1,7 +1,7 @@
 # Template file for 'linux7.2-sc7280'
 pkgname=linux7.2-sc7280
 version=7.2.0
-revision=3
+revision=4
 _flavor="sc7280"
 _series="${version%.*}"
 
@@ -9,8 +9,22 @@ archs="aarch64"
 build_style=gnu-makefile
 
 hostmakedepends="
-    bc bison clang elfutils-devel flex git kmod lld llvm
-    openssl-devel pahole perl python3 tar xz zstd"
+    bc
+    bison
+    clang
+    elfutils-devel
+    flex
+    git
+    kmod
+    lld
+    llvm
+    openssl-devel
+    pahole
+    perl
+    python3
+    tar
+    xz
+    zstd"
 
 short_desc="Linux kernel ${_series} for Qualcomm SC7280/SM7325/QCM6490"
 maintainer="Jaymz665 <jaymz665@gmail.com>"
@@ -35,23 +49,23 @@ do_configure() {
     fi
     export LLVM=1 ARCH=${_arch}
 
-    make ${makejobs} defconfig
     scripts/kconfig/merge_config.sh -m -O . \
-        arch/arm64/configs/sc7280.config \
-        arch/arm64/configs/misc.config \
-        arch/arm64/configs/pmos.config \
-        arch/arm64/configs/hardening.config \
-        arch/arm64/configs/altlinux.config
+        "${FILESDIR}/defconfig" \
+        "${FILESDIR}/sc7280.config" \
+        "${FILESDIR}/misc.config" \
+        "${FILESDIR}/pmos.config" \
+        "${FILESDIR}/altlinux.config"
 
-    scripts/config --set-str LOCALVERSION "-${_flavor}"
-    scripts/config --disable LOCALVERSION_AUTO
-    scripts/config --enable MODULES
-    sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' .config
+    sed -i \
+        -e "s|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"-${_flavor}\"|" \
+        -e 's|^CONFIG_LOCALVERSION_AUTO=y|# CONFIG_LOCALVERSION_AUTO is not set|' \
+        .config
 
     make ${makejobs} olddefconfig
 
     grep '^CONFIG_LOCALVERSION' .config || true
     grep '^CONFIG_MODULES=' .config || true
+    grep '^CONFIG_ARCH_QCOM' .config || true
     echo "=== Q6VOICE in config ==="
     grep -iE 'Q6VOICE|SND_SOC_SM8250' .config | head -10
 }
@@ -61,8 +75,8 @@ do_build() {
         export CROSS_COMPILE="${XBPS_CROSS_TRIPLET}-"
     fi
     export LLVM=1 ARCH=${_arch}
+
     make ${makejobs} all
-    make ${makejobs} modules
     make ${makejobs} dtbs
 }
 
@@ -79,9 +93,11 @@ do_install() {
         modules_install dtbs_install
 
     vmkdir boot
+
     if [ -f "arch/${_arch}/boot/vmlinuz.efi" ]; then
         cp "arch/${_arch}/boot/vmlinuz.efi" "${DESTDIR}/boot/linux.efi"
     fi
+
     if [ -f "arch/${_arch}/boot/vmlinuz" ]; then
         cp "arch/${_arch}/boot/vmlinuz" "${DESTDIR}/boot/vmlinuz"
     elif [ -f "arch/${_arch}/boot/Image.gz" ]; then
