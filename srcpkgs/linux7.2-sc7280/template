@@ -1,41 +1,33 @@
 # Template file for 'linux7.2-sc7280'
 pkgname=linux7.2-sc7280
-version=7.2.8
-revision=1
+version=7.2.0
+revision=3
 _flavor="sc7280"
 _series="${version%.*}"
-_tag="v${version}-${_flavor}"
-_repo="linux"
 
 archs="aarch64"
 build_style=gnu-makefile
 
 hostmakedepends="
-    bc
-    bison
-    clang
-    elfutils-devel
-    flex
-    kmod
-    lld
-    llvm
-    openssl-devel
-    pahole
-    perl
-    python3
-    tar
-    xz
-    zstd"
+    bc bison clang elfutils-devel flex git kmod lld llvm
+    openssl-devel pahole perl python3 tar xz zstd"
 
 short_desc="Linux kernel ${_series} for Qualcomm SC7280/SM7325/QCM6490"
 maintainer="Jaymz665 <jaymz665@gmail.com>"
 license="GPL-2.0-only"
-homepage="https://github.com/sc7280-mainline/linux"
-distfiles="https://github.com/sc7280-mainline/${_repo}/archive/refs/tags/${_tag}/${_repo}-${_tag}.tar.gz"
-checksum=859ec1030ba4e68f30ba80ed0cdbafc0e5d2142261070c087d0b38145416c5b6
-wrksrc="${_repo}-${version}-${_flavor}"
+homepage="https://altlinux.space/alt-mobile/linux"
+
+nofetch=yes
+noextract=yes
+wrksrc="linux"
 
 _arch="arm64"
+
+do_fetch() {
+    msg_normal "Cloning linux (alt/sc7280)...\n"
+    git clone --depth 1 --branch alt/sc7280 \
+        https://altlinux.space/alt-mobile/linux.git "${wrksrc}"
+}
 
 do_configure() {
     if [ -n "$XBPS_CROSS_TRIPLET" ]; then
@@ -43,14 +35,25 @@ do_configure() {
     fi
     export LLVM=1 ARCH=${_arch}
 
-    cp "${FILESDIR}/${_flavor}.config" .config
+    make ${makejobs} defconfig
+    scripts/kconfig/merge_config.sh -m -O . \
+        arch/arm64/configs/sc7280.config \
+        arch/arm64/configs/misc.config \
+        arch/arm64/configs/pmos.config \
+        arch/arm64/configs/hardening.config \
+        arch/arm64/configs/altlinux.config
 
-    sed -i \
-        -e "s|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"-${_flavor}\"|" \
-        -e 's|^CONFIG_LOCALVERSION_AUTO=y|# CONFIG_LOCALVERSION_AUTO is not set|' \
-        .config
+    scripts/config --set-str LOCALVERSION "-${_flavor}"
+    scripts/config --disable LOCALVERSION_AUTO
+    scripts/config --enable MODULES
+    sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' .config
 
     make ${makejobs} olddefconfig
+
+    grep '^CONFIG_LOCALVERSION' .config || true
+    grep '^CONFIG_MODULES=' .config || true
+    echo "=== Q6VOICE in config ==="
+    grep -iE 'Q6VOICE|SND_SOC_SM8250' .config | head -10
 }
 
 do_build() {
@@ -58,8 +61,9 @@ do_build() {
         export CROSS_COMPILE="${XBPS_CROSS_TRIPLET}-"
     fi
     export LLVM=1 ARCH=${_arch}
-
     make ${makejobs} all
+    make ${makejobs} modules
+    make ${makejobs} dtbs
 }
 
 do_install() {
@@ -75,15 +79,15 @@ do_install() {
         modules_install dtbs_install
 
     vmkdir boot
-
     if [ -f "arch/${_arch}/boot/vmlinuz.efi" ]; then
         cp "arch/${_arch}/boot/vmlinuz.efi" "${DESTDIR}/boot/linux.efi"
     fi
-
     if [ -f "arch/${_arch}/boot/vmlinuz" ]; then
         cp "arch/${_arch}/boot/vmlinuz" "${DESTDIR}/boot/vmlinuz"
     elif [ -f "arch/${_arch}/boot/Image.gz" ]; then
         cp "arch/${_arch}/boot/Image.gz" "${DESTDIR}/boot/vmlinuz"
+    elif [ -f "arch/${_arch}/boot/Image" ]; then
+        cp "arch/${_arch}/boot/Image" "${DESTDIR}/boot/vmlinuz"
     fi
 
     vmkdir usr/share/kernel/${_flavor}

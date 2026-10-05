@@ -14,6 +14,7 @@ homepage="https://altlinux.space/neko/alsa-ucm-config"
 distfiles=""
 checksum=
 provides="alsa-ucm-conf-0.${version}_${revision}"
+depends="alsa-ucm-conf"
 
 nofetch=yes
 noextract=yes
