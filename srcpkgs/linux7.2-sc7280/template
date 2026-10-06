@@ -1,9 +1,11 @@
 # Template file for 'linux7.2-sc7280'
 pkgname=linux7.2-sc7280
-version=7.2.0
-revision=5
+version=7.2.9
+revision=1
 _flavor="sc7280"
 _series="${version%.*}"
+_tag="v${version}-${_flavor}"
+_repo="linux"
 
 archs="aarch64"
 build_style=gnu-makefile
@@ -14,7 +16,6 @@ hostmakedepends="
     clang
     elfutils-devel
     flex
-    git
     kmod
     lld
     llvm
@@ -29,19 +30,12 @@ hostmakedepends="
 short_desc="Linux kernel ${_series} for Qualcomm SC7280/SM7325/QCM6490"
 maintainer="Jaymz665 <jaymz665@gmail.com>"
 license="GPL-2.0-only"
-homepage="https://altlinux.space/alt-mobile/linux"
-
-nofetch=yes
-noextract=yes
-wrksrc="linux"
+homepage="https://github.com/sc7280-mainline/linux"
+distfiles="https://github.com/sc7280-mainline/${_repo}/archive/refs/tags/${_tag}/${_repo}-${_tag}.tar.gz"
+checksum=859ec1030ba4e68f30ba80ed0cdbafc0e5d2142261070c087d0b38145416c5b6
+wrksrc="${_repo}-${version}-${_flavor}"
 
 _arch="arm64"
-
-do_fetch() {
-    msg_normal "Cloning linux (alt/sc7280)...\n"
-    git clone --depth 1 --branch alt/sc7280 \
-        https://altlinux.space/alt-mobile/linux.git "${wrksrc}"
-}
 
 do_configure() {
     if [ -n "$XBPS_CROSS_TRIPLET" ]; then
@@ -49,12 +43,7 @@ do_configure() {
     fi
     export LLVM=1 ARCH=${_arch}
 
-    scripts/kconfig/merge_config.sh -m -O . \
-        "${FILESDIR}/defconfig" \
-        "${FILESDIR}/sc7280.config" \
-        "${FILESDIR}/misc.config" \
-        "${FILESDIR}/pmos.config" \
-        "${FILESDIR}/altlinux.config"
+    cp "${FILESDIR}/${_flavor}.config" .config
 
     sed -i \
         -e "s|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"-${_flavor}\"|" \
@@ -62,12 +51,6 @@ do_configure() {
         .config
 
     make ${makejobs} olddefconfig
-
-    grep '^CONFIG_LOCALVERSION' .config || true
-    grep '^CONFIG_MODULES=' .config || true
-    grep '^CONFIG_ARCH_QCOM' .config || true
-    echo "=== Q6VOICE in config ==="
-    grep -iE 'Q6VOICE|SND_SOC_SM8250' .config | head -10
 }
 
 do_build() {
@@ -77,7 +60,6 @@ do_build() {
     export LLVM=1 ARCH=${_arch}
 
     make ${makejobs} all
-    make ${makejobs} dtbs
 }
 
 do_install() {
@@ -102,8 +84,6 @@ do_install() {
         cp "arch/${_arch}/boot/vmlinuz" "${DESTDIR}/boot/vmlinuz"
     elif [ -f "arch/${_arch}/boot/Image.gz" ]; then
         cp "arch/${_arch}/boot/Image.gz" "${DESTDIR}/boot/vmlinuz"
-    elif [ -f "arch/${_arch}/boot/Image" ]; then
-        cp "arch/${_arch}/boot/Image" "${DESTDIR}/boot/vmlinuz"
     fi
 
     vmkdir usr/share/kernel/${_flavor}
