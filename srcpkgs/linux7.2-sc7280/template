@@ -1,7 +1,7 @@
 # Template file for 'linux7.2-sc7280'
 pkgname=linux7.2-sc7280
 version=7.2.0
-revision=4
+revision=5
 _flavor="sc7280"
 _series="${version%.*}"
 
